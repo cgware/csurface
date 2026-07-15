@@ -1,0 +1,33 @@
+---
+AlignConsecutiveAssignments: true
+AlignConsecutiveMacros: true
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortLoopsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: Never
+BinPackArguments: false
+BinPackParameters: true
+BraceWrapping:
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterFunction: true
+  AfterStruct: false
+  AfterUnion: false
+  BeforeElse: false
+BreakBeforeBraces: Custom
+ColumnLimit: 140
+ContinuationIndentWidth: 8
+IndentPPDirectives: BeforeHash
+IndentWidth: 8
+InsertBraces: true
+InsertNewlineAtEOF: true
+PointerAlignment: Right
+SeparateDefinitionBlocks: Leave
+SortIncludes: true
+SpacesBeforeTrailingComments: 1
+SpacesInLineCommentPrefix:
+  Minimum: 1
+  Maximum: -1
+TabWidth: 8
+UseTab: Always
+...
