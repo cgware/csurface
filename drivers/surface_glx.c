@@ -1,9 +1,7 @@
 #include "surface_driver.h"
 
 #include "log.h"
-
-#include <stdint.h>
-#include <string.h>
+#include "mem.h"
 
 typedef void Display;
 typedef void Visual;
@@ -68,7 +66,7 @@ static int surface_glx_load(surface_glx_t *ctx, gfx_t *gfx)
 {
 	if (LOAD_GLX(gfx, ctx, XQueryVersion) || LOAD_GLX(gfx, ctx, XChooseVisual) || LOAD_GLX(gfx, ctx, XCreateContext) ||
 	    LOAD_GLX(gfx, ctx, XDestroyContext) || LOAD_GLX(gfx, ctx, XMakeCurrent) || LOAD_GLX(gfx, ctx, XSwapBuffers)) {
-		memset(&ctx->glx, 0, sizeof(ctx->glx));
+		mem_set(&ctx->glx, 0, sizeof(ctx->glx));
 		return 1;
 	}
 
@@ -92,7 +90,7 @@ static int surface_glx_init(surface_t *srf, const surface_config_t *config)
 		log_error("csurface", "glx", NULL, "failed to allocate surface data");
 		return 1;
 	}
-	memset(ctx, 0, sizeof(*ctx));
+	mem_set(ctx, 0, sizeof(*ctx));
 
 	if (surface_glx_load(ctx, config->gfx)) {
 		alloc_free(&alloc, ctx, sizeof(*ctx));

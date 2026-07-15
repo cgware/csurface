@@ -1,12 +1,7 @@
 #include "display_driver.h"
-#include "fs.h"
-#include "gfx.h"
 #include "gfx_driver.h"
 #include "log.h"
-#include "proc.h"
-#include "sock.h"
 #include "surface.h"
-#include "window.h"
 
 static display_driver_t *find_display_driver(strv_t name)
 {

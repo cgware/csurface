@@ -1,12 +1,9 @@
 #ifndef SURFACE_H
 #define SURFACE_H
 
-#include "alloc.h"
 #include "display.h"
 #include "gfx.h"
 #include "window.h"
-
-#include <stddef.h>
 
 typedef struct surface_info_s {
 	gfx_api_t gfx_api;

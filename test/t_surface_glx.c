@@ -2,10 +2,7 @@
 
 #include "display_driver.h"
 #include "gfx_driver.h"
-#include "proc.h"
 #include "surface_driver.h"
-
-#include <stdint.h>
 
 typedef void Display;
 typedef void Visual;

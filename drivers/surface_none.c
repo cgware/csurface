@@ -1,7 +1,5 @@
 #include "surface_driver.h"
 
-#include <stddef.h>
-
 static int surface_none_compatible(const surface_info_t *info)
 {
 	return info != NULL && info->gfx_api == GFX_API_NONE && info->native_type == DISPLAY_NATIVE_NONE;
