@@ -164,6 +164,95 @@ TEST(surface_init_calls_driver)
 	END;
 }
 
+TEST(surface_init_driver_failure_clears_fields)
+{
+	START;
+
+	t_surface_reset();
+	t_surface_init_ret = 1;
+	surface_t srf	   = {0};
+
+	EXPECT_EQ(surface_init_driver(&srf, &t_surface_driver, &t_surface_config), NULL);
+	EXPECT_EQ(srf.drv, NULL);
+	EXPECT_EQ(srf.data, NULL);
+
+	END;
+}
+
+TEST(surface_init_gfx_api_failure)
+{
+	START;
+
+	surface_t srf		= {0};
+	gfx_t gfx		= {0};
+	surface_config_t config = t_surface_config;
+	config.gfx		= &gfx;
+
+	EXPECT_EQ(surface_init(&srf, &config), NULL);
+
+	END;
+}
+
+TEST(surface_free_null_surface)
+{
+	START;
+
+	surface_free(NULL);
+
+	END;
+}
+
+TEST(surface_free_without_driver)
+{
+	START;
+
+	surface_t srf = {0};
+
+	surface_free(&srf);
+
+	END;
+}
+
+TEST(surface_config_window_null_surface)
+{
+	START;
+
+	window_config_t config = {0};
+
+	EXPECT_EQ(surface_config_window(NULL, &config), 1);
+
+	END;
+}
+
+TEST(surface_bind_null_surface)
+{
+	START;
+
+	window_t window = {0};
+
+	EXPECT_EQ(surface_bind(NULL, &window), 1);
+
+	END;
+}
+
+TEST(surface_unbind_null_surface)
+{
+	START;
+
+	EXPECT_EQ(surface_unbind(NULL), 1);
+
+	END;
+}
+
+TEST(surface_present_null_surface)
+{
+	START;
+
+	EXPECT_EQ(surface_present(NULL), 1);
+
+	END;
+}
+
 TEST(surface_config_window_calls_driver)
 {
 	START;
@@ -242,10 +331,18 @@ STEST(surface)
 	RUN(surface_init_null_driver);
 	RUN(surface_init_null_config);
 	RUN(surface_init_calls_driver);
+	RUN(surface_init_driver_failure_clears_fields);
+	RUN(surface_init_gfx_api_failure);
 	RUN(surface_init_no_compatible_driver);
+	RUN(surface_free_null_surface);
+	RUN(surface_free_without_driver);
+	RUN(surface_config_window_null_surface);
 	RUN(surface_config_window_calls_driver);
+	RUN(surface_bind_null_surface);
 	RUN(surface_bind_calls_driver);
+	RUN(surface_unbind_null_surface);
 	RUN(surface_unbind_calls_driver);
+	RUN(surface_present_null_surface);
 	RUN(surface_present_calls_driver);
 
 	SEND;

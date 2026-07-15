@@ -195,8 +195,8 @@ static int surface_glx_bind(surface_t *srf, window_t *window)
 		return 1;
 	}
 
-	if (ctx->context != NULL && surface_glx_unbind(srf)) {
-		return 1;
+	if (ctx->context != NULL) {
+		surface_glx_unbind(srf);
 	}
 
 	ctx->window  = (Window)(uintptr_t)native.window;
