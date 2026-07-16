@@ -578,7 +578,7 @@ TEST(surface_glx_config_window_queries_version)
 	END;
 }
 
-TEST(surface_glx_bind_creates_context)
+TEST(surface_glx_bind_sets_native_handle)
 {
 	START;
 
@@ -593,8 +593,10 @@ TEST(surface_glx_bind_creates_context)
 	surface_config_window(&surface, &config);
 
 	surface_bind(&surface, &window);
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
 
-	EXPECT_EQ(t_glx_create_context_calls, 1);
+	EXPECT_EQ(native.handle, (u64)(uintptr_t)t_window_native_window);
 
 	t_surface_glx_close(&proc, &surface);
 	END;
@@ -656,7 +658,7 @@ TEST(surface_glx_bind_native_window_unavailable)
 	END;
 }
 
-TEST(surface_glx_bind_replaces_context)
+TEST(surface_glx_bind_replaces_window)
 {
 	START;
 
@@ -670,84 +672,18 @@ TEST(surface_glx_bind_replaces_context)
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
 	surface_config_window(&surface, &config);
 	surface_bind(&surface, &window);
+	t_window_native_window = (void *)(uintptr_t)0x5678;
 
 	EXPECT_EQ(surface_bind(&surface, &window), 0);
-	EXPECT_EQ(t_glx_destroy_context_calls, 1);
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
+	EXPECT_EQ(native.handle, 0x5678u);
 
 	t_surface_glx_close(&proc, &surface);
 	END;
 }
 
-TEST(surface_glx_bind_create_context_failure)
-{
-	START;
-
-	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
-	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	t_glx_create_context_ret = NULL;
-
-	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
-	log_set_quiet(0, 0);
-
-	t_surface_glx_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_glx_bind_make_current_failure)
-{
-	START;
-
-	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
-	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	t_glx_make_current_ret = 0;
-
-	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
-	log_set_quiet(0, 0);
-	EXPECT_EQ(t_glx_destroy_context_calls, 1);
-
-	t_surface_glx_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_glx_bind_makes_current)
-{
-	START;
-
-	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
-	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-
-	surface_bind(&surface, &window);
-
-	EXPECT_EQ(t_glx_make_current_calls, 1);
-
-	t_surface_glx_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_glx_present_swaps_buffers)
+TEST(surface_glx_native_returns_display)
 {
 	START;
 
@@ -761,27 +697,16 @@ TEST(surface_glx_present_swaps_buffers)
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
 	surface_config_window(&surface, &config);
 	surface_bind(&surface, &window);
+	surface_native_t native = {0};
 
-	EXPECT_EQ(surface_present(&surface), 0);
-	EXPECT_EQ(t_glx_swap_buffers_calls, 1);
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_EQ(native.display, t_display_native_display);
 
 	t_surface_glx_close(&proc, &surface);
 	END;
 }
 
-TEST(surface_glx_present_null_surface)
-{
-	START;
-
-	surface_driver_t *drv = t_surface_glx_driver();
-	EXPECT_NE(drv, NULL);
-
-	EXPECT_EQ(drv->present(NULL), 1);
-
-	END;
-}
-
-TEST(surface_glx_present_without_bind)
+TEST(surface_glx_native_returns_visual)
 {
 	START;
 
@@ -790,17 +715,60 @@ TEST(surface_glx_present_without_bind)
 	gfx_t gfx	       = {0};
 	display_t display      = {0};
 	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
 	window_config_t config = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
 	surface_config_window(&surface, &config);
+	surface_bind(&surface, &window);
+	surface_native_t native = {0};
 
-	EXPECT_EQ(surface_present(&surface), 1);
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_EQ(native.visual, &t_glx_visual);
 
 	t_surface_glx_close(&proc, &surface);
 	END;
 }
 
-TEST(surface_glx_unbind_destroys_context)
+TEST(surface_glx_native_without_bind)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	window_config_t config = {0};
+	(void)window;
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+	surface_config_window(&surface, &config);
+	surface_native_t native = {0};
+
+	EXPECT_EQ(surface_native(&surface, &native), 1);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_glx_native_null_native)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+
+	EXPECT_EQ(surface.drv->native(&surface, NULL), 1);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_glx_unbind_clears_native_handle)
 {
 	START;
 
@@ -816,8 +784,9 @@ TEST(surface_glx_unbind_destroys_context)
 	surface_bind(&surface, &window);
 
 	surface_unbind(&surface);
+	surface_native_t native = {0};
 
-	EXPECT_EQ(t_glx_destroy_context_calls, 1);
+	EXPECT_EQ(surface_native(&surface, &native), 1);
 
 	t_surface_glx_close(&proc, &surface);
 	END;
@@ -863,18 +832,16 @@ STEST(surface_glx)
 	RUN(surface_glx_config_window_sets_depth);
 	RUN(surface_glx_config_window_sets_visual);
 	RUN(surface_glx_config_window_queries_version);
-	RUN(surface_glx_bind_creates_context);
+	RUN(surface_glx_bind_sets_native_handle);
 	RUN(surface_glx_bind_null_surface);
 	RUN(surface_glx_bind_without_window_config);
 	RUN(surface_glx_bind_native_window_unavailable);
-	RUN(surface_glx_bind_replaces_context);
-	RUN(surface_glx_bind_create_context_failure);
-	RUN(surface_glx_bind_make_current_failure);
-	RUN(surface_glx_bind_makes_current);
-	RUN(surface_glx_present_swaps_buffers);
-	RUN(surface_glx_present_null_surface);
-	RUN(surface_glx_present_without_bind);
-	RUN(surface_glx_unbind_destroys_context);
+	RUN(surface_glx_bind_replaces_window);
+	RUN(surface_glx_native_returns_display);
+	RUN(surface_glx_native_returns_visual);
+	RUN(surface_glx_native_without_bind);
+	RUN(surface_glx_native_null_native);
+	RUN(surface_glx_unbind_clears_native_handle);
 	RUN(surface_glx_free_releases_visual);
 
 	SEND;

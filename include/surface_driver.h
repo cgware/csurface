@@ -7,12 +7,13 @@
 typedef struct surface_driver_s {
 	const char *name;
 	int (*compatible)(const surface_info_t *info);
+	int (*plan)(const surface_info_t *info, surface_plan_t *plan);
 	int (*init)(surface_t *srf, const surface_config_t *config);
 	int (*free)(surface_t *srf);
 	int (*config_window)(surface_t *srf, window_config_t *config);
 	int (*bind)(surface_t *srf, window_t *window);
 	int (*unbind)(surface_t *srf);
-	int (*present)(surface_t *srf);
+	int (*native)(surface_t *srf, surface_native_t *native);
 } surface_driver_t;
 
 surface_t *surface_init_driver(surface_t *srf, const surface_driver_t *drv, const surface_config_t *config);

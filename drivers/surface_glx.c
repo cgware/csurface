@@ -5,7 +5,6 @@
 
 typedef void Display;
 typedef void Visual;
-typedef unsigned long XID;
 typedef unsigned long Window;
 typedef unsigned long VisualID;
 typedef int Bool;
@@ -23,11 +22,7 @@ typedef struct XVisualInfo_s {
 	int bits_per_rgb;
 } XVisualInfo;
 
-typedef XID GLXDrawable;
-typedef void *GLXContext;
-
 enum {
-	GL_TRUE		 = 1,
 	GLX_RGBA	 = 4,
 	GLX_DOUBLEBUFFER = 5,
 };
@@ -35,10 +30,6 @@ enum {
 typedef struct glx_s {
 	Bool (*XQueryVersion)(Display *, int *, int *);
 	XVisualInfo *(*XChooseVisual)(Display *, int, int *);
-	GLXContext (*XCreateContext)(Display *, XVisualInfo *, GLXContext, Bool);
-	void (*XDestroyContext)(Display *, GLXContext);
-	Bool (*XMakeCurrent)(Display *, GLXDrawable, GLXContext);
-	void (*XSwapBuffers)(Display *, GLXDrawable);
 } glx_t;
 
 typedef struct surface_glx_s {
@@ -46,7 +37,6 @@ typedef struct surface_glx_s {
 	display_t *cdisplay;
 	Display *display;
 	XVisualInfo *visual;
-	GLXContext context;
 	Window window;
 } surface_glx_t;
 
@@ -64,8 +54,7 @@ static int surface_glx_load_symbol(gfx_t *gfx, void **sym, strv_t name)
 
 static int surface_glx_load(surface_glx_t *ctx, gfx_t *gfx)
 {
-	if (LOAD_GLX(gfx, ctx, XQueryVersion) || LOAD_GLX(gfx, ctx, XChooseVisual) || LOAD_GLX(gfx, ctx, XCreateContext) ||
-	    LOAD_GLX(gfx, ctx, XDestroyContext) || LOAD_GLX(gfx, ctx, XMakeCurrent) || LOAD_GLX(gfx, ctx, XSwapBuffers)) {
+	if (LOAD_GLX(gfx, ctx, XQueryVersion) || LOAD_GLX(gfx, ctx, XChooseVisual)) {
 		mem_set(&ctx->glx, 0, sizeof(ctx->glx));
 		return 1;
 	}
@@ -108,11 +97,6 @@ static int surface_glx_unbind(surface_t *srf)
 	}
 
 	surface_glx_t *ctx = srf->data;
-	if (ctx->display != NULL && ctx->context != NULL) {
-		ctx->glx.XMakeCurrent(ctx->display, 0, NULL);
-		ctx->glx.XDestroyContext(ctx->display, ctx->context);
-		ctx->context = NULL;
-	}
 	ctx->window = 0;
 	return 0;
 }
@@ -195,40 +179,32 @@ static int surface_glx_bind(surface_t *srf, window_t *window)
 		return 1;
 	}
 
-	if (ctx->context != NULL) {
+	if (ctx->window != 0) {
 		surface_glx_unbind(srf);
 	}
 
-	ctx->window  = (Window)(uintptr_t)native.window;
-	ctx->context = ctx->glx.XCreateContext(ctx->display, ctx->visual, NULL, GL_TRUE);
-	if (ctx->context == NULL) {
-		ctx->window = 0;
-		log_error("csurface", "glx", NULL, "failed to create GLX context");
-		return 1;
-	}
-	if (!ctx->glx.XMakeCurrent(ctx->display, (GLXDrawable)ctx->window, ctx->context)) {
-		ctx->glx.XDestroyContext(ctx->display, ctx->context);
-		ctx->context = NULL;
-		ctx->window  = 0;
-		log_error("csurface", "glx", NULL, "failed to make the GLX context current");
-		return 1;
-	}
-
+	ctx->window = (Window)(uintptr_t)native.window;
 	return 0;
 }
 
-static int surface_glx_present(surface_t *srf)
+static int surface_glx_native(surface_t *srf, surface_native_t *native)
 {
-	if (srf == NULL || srf->data == NULL) {
+	if (srf == NULL || srf->data == NULL || native == NULL) {
 		return 1;
 	}
 
 	surface_glx_t *ctx = srf->data;
-	if (ctx->display == NULL || ctx->context == NULL || ctx->window == 0) {
+	if (ctx->display == NULL || ctx->visual == NULL || ctx->window == 0) {
 		return 1;
 	}
 
-	ctx->glx.XSwapBuffers(ctx->display, (GLXDrawable)ctx->window);
+	*native = (surface_native_t){
+		.gfx_api     = GFX_API_OPENGL,
+		.native_type = DISPLAY_NATIVE_X11,
+		.display     = ctx->display,
+		.visual      = ctx->visual,
+		.handle      = ctx->window,
+	};
 	return 0;
 }
 
@@ -240,7 +216,7 @@ static surface_driver_t surface_glx = {
 	.config_window = surface_glx_config_window,
 	.bind	       = surface_glx_bind,
 	.unbind	       = surface_glx_unbind,
-	.present       = surface_glx_present,
+	.native	       = surface_glx_native,
 };
 
 SURFACE_DRIVER(surface_glx, &surface_glx);

@@ -5,6 +5,7 @@
 STEST(surface);
 STEST(surface_none);
 STEST(surface_glx);
+STEST(surface_vk_wsi);
 
 TEST(curface)
 {
@@ -12,6 +13,7 @@ TEST(curface)
 	RUN(surface);
 	RUN(surface_none);
 	RUN(surface_glx);
+	RUN(surface_vk_wsi);
 	SEND;
 }
 
