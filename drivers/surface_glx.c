@@ -97,7 +97,7 @@ static int surface_glx_unbind(surface_t *srf)
 	}
 
 	surface_glx_t *ctx = srf->data;
-	ctx->window = 0;
+	ctx->window	   = 0;
 	return 0;
 }
 
@@ -155,10 +155,11 @@ static int surface_glx_config_window(surface_t *srf, window_config_t *config)
 		return 1;
 	}
 
-	ctx->cdisplay  = srf->config.display;
-	ctx->display   = native.display;
-	config->depth  = (u8)ctx->visual->depth;
-	config->visual = (u32)ctx->visual->visualid;
+	ctx->cdisplay	   = srf->config.display;
+	ctx->display	   = native.display;
+	config->depth	   = (u8)ctx->visual->depth;
+	config->visual	   = (u32)ctx->visual->visualid;
+	config->background = WINDOW_BACKGROUND_NONE;
 	return 0;
 }
 
@@ -202,8 +203,8 @@ static int surface_glx_native(surface_t *srf, surface_native_t *native)
 		.gfx_api     = GFX_API_OPENGL,
 		.native_type = DISPLAY_NATIVE_X11,
 		.display     = ctx->display,
-		.visual      = ctx->visual,
-		.handle      = ctx->window,
+		.visual	     = ctx->visual,
+		.handle	     = ctx->window,
 	};
 	return 0;
 }

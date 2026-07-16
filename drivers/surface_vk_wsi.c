@@ -168,8 +168,9 @@ static int surface_vk_wsi_config_window(surface_t *srf, window_config_t *config)
 		return 1;
 	}
 
-	config->depth  = 0;
-	config->visual = 0;
+	config->depth	   = 0;
+	config->visual	   = 0;
+	config->background = WINDOW_BACKGROUND_NONE;
 	return 0;
 }
 

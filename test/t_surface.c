@@ -1,8 +1,8 @@
-#include "test.h"
+#include "surface_driver.h"
 
 #include "display_driver.h"
 #include "gfx_driver.h"
-#include "surface_driver.h"
+#include "test.h"
 
 static int t_surface_init_calls;
 static int t_surface_free_calls;
@@ -209,7 +209,7 @@ TEST(surface_plan_skips_non_surface_driver)
 	START;
 
 	t_surface_reset();
-	display_t display = {.drv = &t_surface_display_driver};
+	display_t display   = {.drv = &t_surface_display_driver};
 	surface_plan_t plan = {0};
 
 	EXPECT_EQ(surface_plan(&plan, &(surface_plan_config_t){.display = &display, .gfx_api = (gfx_api_t)99}), 1);
@@ -238,8 +238,8 @@ TEST(surface_plan_returns_success_without_driver_plan)
 		.name	= "test",
 		.native = t_surface_display_native_x11,
 	};
-	display_t display		  = {.drv = &display_driver};
-	surface_plan_t plan		  = {0};
+	display_t display   = {.drv = &display_driver};
+	surface_plan_t plan = {0};
 
 	EXPECT_EQ(surface_plan(&plan, &(surface_plan_config_t){.display = &display, .gfx_api = GFX_API_OPENGL}), 0);
 
@@ -434,7 +434,7 @@ TEST(surface_native_calls_driver)
 	START;
 
 	t_surface_reset();
-	surface_t srf = {.drv = &t_surface_driver};
+	surface_t srf		= {.drv = &t_surface_driver};
 	surface_native_t native = {0};
 
 	surface_native(&srf, &native);
@@ -449,7 +449,7 @@ TEST(surface_native_sets_native)
 	START;
 
 	t_surface_reset();
-	surface_t srf = {.drv = &t_surface_driver};
+	surface_t srf		= {.drv = &t_surface_driver};
 	surface_native_t native = {0};
 
 	surface_native(&srf, &native);
@@ -464,8 +464,8 @@ TEST(surface_native_returns_driver_result)
 	START;
 
 	t_surface_reset();
-	t_surface_native_ret = 1;
-	surface_t srf = {.drv = &t_surface_driver};
+	t_surface_native_ret	= 1;
+	surface_t srf		= {.drv = &t_surface_driver};
 	surface_native_t native = {0};
 
 	EXPECT_EQ(surface_native(&srf, &native), 1);

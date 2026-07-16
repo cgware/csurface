@@ -1,7 +1,7 @@
-#include "test.h"
+#include "surface_driver.h"
 
 #include "gfx_driver.h"
-#include "surface_driver.h"
+#include "test.h"
 
 static surface_driver_t *t_surface_none_driver(void)
 {

@@ -1,9 +1,9 @@
-#include "test.h"
+#include "surface_driver.h"
 
 #include "display_driver.h"
 #include "gfx_driver.h"
 #include "log.h"
-#include "surface_driver.h"
+#include "test.h"
 
 typedef void Display;
 typedef void Visual;
@@ -558,6 +558,26 @@ TEST(surface_glx_config_window_sets_visual)
 	END;
 }
 
+TEST(surface_glx_config_window_omits_background)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+
+	surface_config_window(&surface, &config);
+
+	EXPECT_EQ(config.background, WINDOW_BACKGROUND_NONE);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
 TEST(surface_glx_config_window_queries_version)
 {
 	START;
@@ -756,10 +776,10 @@ TEST(surface_glx_native_null_native)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
+	proc_t proc	  = {0};
+	gfx_t gfx	  = {0};
+	display_t display = {0};
+	surface_t surface = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
 
 	EXPECT_EQ(surface.drv->native(&surface, NULL), 1);
@@ -831,6 +851,7 @@ STEST(surface_glx)
 	RUN(surface_glx_config_window_no_visual);
 	RUN(surface_glx_config_window_sets_depth);
 	RUN(surface_glx_config_window_sets_visual);
+	RUN(surface_glx_config_window_omits_background);
 	RUN(surface_glx_config_window_queries_version);
 	RUN(surface_glx_bind_sets_native_handle);
 	RUN(surface_glx_bind_null_surface);
