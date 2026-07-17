@@ -81,14 +81,14 @@ static int set_target_size(example_target_t *target, u16 width, u16 height)
 	if (surface_native(&target->surface, &native)) {
 		return 1;
 	}
-	if (gfx_set_target(&target->gfx,
-			   &(gfx_target_t){
-				   .type	 = GFX_TARGET_SURFACE,
-				   .format	 = GFX_FORMAT_RGBA8,
-				   .surface = native.gfx_surface,
-				   .width	 = width,
-				   .height	 = height,
-			   })) {
+	gfx_target_t gfx_target = {
+		.type	 = GFX_TARGET_SURFACE,
+		.format	 = GFX_FORMAT_RGBA8,
+		.surface = native.gfx_surface,
+		.width	 = width,
+		.height	 = height,
+	};
+	if (gfx_set_target(&target->gfx, &gfx_target)) {
 		return 1;
 	}
 
@@ -103,8 +103,9 @@ static void destroy_target(example_target_t *target)
 		return;
 	}
 
-	target->open = 0;
-	gfx_set_target(&target->gfx, &(gfx_target_t){.type = GFX_TARGET_NONE});
+	target->open		= 0;
+	gfx_target_t gfx_target = {.type = GFX_TARGET_NONE};
+	gfx_set_target(&target->gfx, &gfx_target);
 	surface_free(&target->surface);
 	window_free(&target->window);
 	target->initialized = 0;
@@ -144,7 +145,8 @@ static void free_graphics(example_target_t *targets, u32 count)
 
 static int fail_target_init(example_target_t *target)
 {
-	gfx_set_target(&target->gfx, &(gfx_target_t){.type = GFX_TARGET_NONE});
+	gfx_target_t gfx_target = {.type = GFX_TARGET_NONE};
+	gfx_set_target(&target->gfx, &gfx_target);
 	surface_free(&target->surface);
 	window_free(&target->window);
 	return -1;
@@ -259,12 +261,14 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 		return 1;
 	}
 
-	u32 driver_count = 1;
-	drivers[0]	 = gfx_driver_find(STRV("opengl"));
+	u32 driver_count = gfx_driver_list(drivers, sizeof(drivers) / sizeof(drivers[0]));
 	if (driver_count > sizeof(drivers) / sizeof(drivers[0])) {
 		driver_count = sizeof(drivers) / sizeof(drivers[0]);
 	}
 	for (u32 i = 0; i < driver_count; i++) {
+		if (drivers[i] == NULL) {
+			continue;
+		}
 		int opened = open_target(&display, proc, drivers[i], target_count, &targets[target_count]);
 		if (opened < 0) {
 			if (targets[target_count].gfx.drv != NULL) {
@@ -294,11 +298,12 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 	if (ret == 0) {
 		display_set_event_callback(&display, on_event, &state);
 		if (draw_all(targets, target_count)) {
-			log_error("csurface_example", "draw", NULL, "initial frame draw failed for display driver: %s", display_driver->name);
+			log_error(
+				"csurface_example", "draw", NULL, "initial frame draw failed for display driver: %s", display_driver->name);
 			ret = 1;
 		}
 	}
-	while (ret == 0 && state.open > 0) {
+	while (ret == 0) {
 		if (display_wait_events(&display)) {
 			log_error("csurface_example",
 				  "event",
@@ -313,6 +318,9 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 			break;
 		}
 		destroy_closed(&state);
+		if (state.open == 0) {
+			break;
+		}
 		if (draw_all(targets, target_count)) {
 			log_error("csurface_example", "draw", NULL, "frame draw failed for display driver: %s", display_driver->name);
 			ret = 1;
@@ -320,8 +328,8 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 	}
 
 	close_all(&state);
-	display_free(&display);
 	free_graphics(targets, target_count);
+	display_free(&display);
 	return ret;
 }
 

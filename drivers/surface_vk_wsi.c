@@ -140,7 +140,7 @@ static int surface_vk_wsi_unbind(surface_t *srf)
 		ctx->surface = 0;
 	}
 	ctx->gfx_surface = (gfx_surface_t){0};
-	ctx->native_type  = DISPLAY_NATIVE_NONE;
+	ctx->native_type = DISPLAY_NATIVE_NONE;
 	return 0;
 }
 

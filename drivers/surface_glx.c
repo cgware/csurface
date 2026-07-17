@@ -137,9 +137,11 @@ static int surface_glx_free(surface_t *srf)
 		display_native_free(ctx->cdisplay, ctx->visual);
 		ctx->visual = NULL;
 	}
-	if (ctx->lib != NULL) {
-		proc_dlclose(ctx->proc, ctx->lib);
-	}
+	/*
+	 * GLX installs Xlib extension hooks on Display. XCloseDisplay calls those
+	 * hooks, so unloading libGLX while the display is still open leaves Xlib
+	 * with callbacks into unmapped code.
+	 */
 
 	alloc_free(&srf->config.alloc, ctx, sizeof(*ctx));
 	srf->data = NULL;
@@ -213,7 +215,7 @@ static int surface_glx_bind(surface_t *srf, window_t *window)
 		surface_glx_unbind(srf);
 	}
 
-	ctx->window = (Window)(uintptr_t)native.window;
+	ctx->window  = (Window)(uintptr_t)native.window;
 	ctx->context = ctx->glx.XCreateContext(ctx->display, ctx->visual, NULL, 1);
 	if (ctx->context == NULL) {
 		ctx->window = 0;

@@ -41,11 +41,11 @@ typedef struct PIXELFORMATDESCRIPTOR_s {
 } PIXELFORMATDESCRIPTOR;
 
 enum {
-	PFD_DOUBLEBUFFER	  = 0x00000001,
+	PFD_DOUBLEBUFFER   = 0x00000001,
 	PFD_DRAW_TO_WINDOW = 0x00000004,
 	PFD_SUPPORT_OPENGL = 0x00000020,
-	PFD_TYPE_RGBA	  = 0,
-	PFD_MAIN_PLANE	  = 0,
+	PFD_TYPE_RGBA	   = 0,
+	PFD_MAIN_PLANE	   = 0,
 };
 
 typedef struct wgl_s {
@@ -179,9 +179,9 @@ static int surface_wgl_unbind(surface_t *srf)
 	if (ctx->dc != NULL) {
 		ctx->wgl.ReleaseDC(ctx->window, ctx->dc);
 	}
-	ctx->window	   = NULL;
-	ctx->dc		   = NULL;
-	ctx->context	   = NULL;
+	ctx->window	  = NULL;
+	ctx->dc		  = NULL;
+	ctx->context	  = NULL;
 	ctx->pixel_format = 0;
 	ctx->gfx_surface  = (gfx_surface_t){0};
 	return 0;
@@ -222,15 +222,15 @@ static int surface_wgl_config_window(surface_t *srf, window_config_t *config)
 static PIXELFORMATDESCRIPTOR surface_wgl_pixel_format_descriptor(void)
 {
 	return (PIXELFORMATDESCRIPTOR){
-		.nSize	     = (WORD)sizeof(PIXELFORMATDESCRIPTOR),
-		.nVersion    = 1,
-		.dwFlags     = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
-		.iPixelType  = PFD_TYPE_RGBA,
-		.cColorBits  = 32,
-		.cAlphaBits  = 8,
-		.cDepthBits  = 24,
+		.nSize	      = (WORD)sizeof(PIXELFORMATDESCRIPTOR),
+		.nVersion     = 1,
+		.dwFlags      = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
+		.iPixelType   = PFD_TYPE_RGBA,
+		.cColorBits   = 32,
+		.cAlphaBits   = 8,
+		.cDepthBits   = 24,
 		.cStencilBits = 8,
-		.iLayerType  = PFD_MAIN_PLANE,
+		.iLayerType   = PFD_MAIN_PLANE,
 	};
 }
 
@@ -243,7 +243,7 @@ static int surface_wgl_pixel_format_supported(const PIXELFORMATDESCRIPTOR *forma
 static int surface_wgl_configure_pixel_format(surface_wgl_t *ctx, HDC dc)
 {
 	PIXELFORMATDESCRIPTOR format = surface_wgl_pixel_format_descriptor();
-	int pixel_format		= ctx->wgl.GetPixelFormat(dc);
+	int pixel_format	     = ctx->wgl.GetPixelFormat(dc);
 	if (pixel_format != 0) {
 		PIXELFORMATDESCRIPTOR current = {0};
 		if (!ctx->wgl.DescribePixelFormat(dc, pixel_format, (UINT)sizeof(current), &current) ||

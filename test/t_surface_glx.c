@@ -401,6 +401,39 @@ TEST(surface_glx_init_missing_symbol)
 	END;
 }
 
+TEST(surface_glx_init_missing_second_symbol)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc = {0};
+	proc_init(&proc, 0, 1, ALLOC_STD);
+	proc_setdlsym(&proc, STRV("libGL.so.1"), STRV("glXQueryVersion"), t_surface_glx_symbol((t_surface_glx_symbol_t)t_glXQueryVersion));
+	gfx_t gfx = {
+		.drv  = &t_surface_glx_gfx_driver,
+		.data = &proc,
+	};
+	display_t display = {
+		.drv  = &t_surface_glx_display_driver,
+		.proc = &proc,
+	};
+	surface_t surface = {0};
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_init_driver(&surface,
+				      t_surface_glx_driver(),
+				      &(surface_config_t){
+					      .display = &display,
+					      .gfx     = &gfx,
+					      .alloc   = ALLOC_STD,
+				      }),
+		  NULL);
+	log_set_quiet(0, 0);
+
+	proc_free(&proc);
+	END;
+}
+
 TEST(surface_glx_unbind_null_surface)
 {
 	START;
@@ -711,6 +744,29 @@ TEST(surface_glx_bind_replaces_window)
 	END;
 }
 
+TEST(surface_glx_bind_create_context_failure)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+	surface_config_window(&surface, &config);
+	t_glx_create_context_ret = NULL;
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
 TEST(surface_glx_native_returns_display)
 {
 	START;
@@ -800,6 +856,203 @@ TEST(surface_glx_native_null_native)
 	END;
 }
 
+TEST(surface_glx_gfx_proc_rejects_null_surface)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+	surface_config_window(&surface, &config);
+	surface_bind(&surface, &window);
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
+	void *sym = NULL;
+
+	EXPECT_EQ(native.gfx_surface->ops->proc(NULL, STRV("glXSwapBuffers"), &sym), 1);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_glx_gfx_proc_loads_symbol)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+	surface_config_window(&surface, &config);
+	surface_bind(&surface, &window);
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
+	void *sym = NULL;
+
+	EXPECT_EQ(native.gfx_surface->ops->proc(native.gfx_surface, STRV("glXSwapBuffers"), &sym), 0);
+	EXPECT_EQ(sym, t_surface_glx_symbol((t_surface_glx_symbol_t)t_glXSwapBuffers));
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_glx_gfx_make_current_rejects_null_surface)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+	surface_config_window(&surface, &config);
+	surface_bind(&surface, &window);
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
+
+	EXPECT_EQ(native.gfx_surface->ops->make_current(NULL), 1);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_glx_gfx_make_current_calls_glx)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+	surface_config_window(&surface, &config);
+	surface_bind(&surface, &window);
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
+	t_glx_make_current_calls = 0;
+
+	EXPECT_EQ(native.gfx_surface->ops->make_current(native.gfx_surface), 0);
+	EXPECT_EQ(t_glx_make_current_calls, 1);
+	EXPECT_EQ(t_glx_drawable, (GLXDrawable)(uintptr_t)t_window_native_window);
+	EXPECT_EQ(t_glx_context, t_glx_create_context_ret);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_glx_gfx_clear_current_rejects_null_surface)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+	surface_config_window(&surface, &config);
+	surface_bind(&surface, &window);
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
+
+	EXPECT_EQ(native.gfx_surface->ops->clear_current(NULL), 1);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_glx_gfx_clear_current_calls_glx)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+	surface_config_window(&surface, &config);
+	surface_bind(&surface, &window);
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
+	t_glx_make_current_calls = 0;
+
+	EXPECT_EQ(native.gfx_surface->ops->clear_current(native.gfx_surface), 0);
+	EXPECT_EQ(t_glx_make_current_calls, 1);
+	EXPECT_EQ(t_glx_drawable, 0u);
+	EXPECT_EQ(t_glx_context, NULL);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_glx_gfx_present_rejects_null_surface)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+	surface_config_window(&surface, &config);
+	surface_bind(&surface, &window);
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
+
+	EXPECT_EQ(native.gfx_surface->ops->present(NULL), 1);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_glx_gfx_present_swaps_buffers)
+{
+	START;
+
+	t_surface_glx_reset();
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
+	surface_config_window(&surface, &config);
+	surface_bind(&surface, &window);
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
+
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface), 0);
+	EXPECT_EQ(t_glx_swap_buffers_calls, 1);
+	EXPECT_EQ(t_glx_drawable, (GLXDrawable)(uintptr_t)t_window_native_window);
+
+	t_surface_glx_close(&proc, &surface);
+	END;
+}
+
 TEST(surface_glx_unbind_clears_native_handle)
 {
 	START;
@@ -854,6 +1107,7 @@ STEST(surface_glx)
 	RUN(surface_glx_init_null_surface);
 	RUN(surface_glx_init_alloc_failure);
 	RUN(surface_glx_init_missing_symbol);
+	RUN(surface_glx_init_missing_second_symbol);
 	RUN(surface_glx_unbind_null_surface);
 	RUN(surface_glx_free_null_surface);
 	RUN(surface_glx_config_window_null_surface);
@@ -870,10 +1124,19 @@ STEST(surface_glx)
 	RUN(surface_glx_bind_without_window_config);
 	RUN(surface_glx_bind_native_window_unavailable);
 	RUN(surface_glx_bind_replaces_window);
+	RUN(surface_glx_bind_create_context_failure);
 	RUN(surface_glx_native_returns_display);
 	RUN(surface_glx_native_returns_visual);
 	RUN(surface_glx_native_without_bind);
 	RUN(surface_glx_native_null_native);
+	RUN(surface_glx_gfx_proc_rejects_null_surface);
+	RUN(surface_glx_gfx_proc_loads_symbol);
+	RUN(surface_glx_gfx_make_current_rejects_null_surface);
+	RUN(surface_glx_gfx_make_current_calls_glx);
+	RUN(surface_glx_gfx_clear_current_rejects_null_surface);
+	RUN(surface_glx_gfx_clear_current_calls_glx);
+	RUN(surface_glx_gfx_present_rejects_null_surface);
+	RUN(surface_glx_gfx_present_swaps_buffers);
 	RUN(surface_glx_unbind_clears_native_handle);
 	RUN(surface_glx_free_releases_visual);
 
