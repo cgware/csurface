@@ -4,7 +4,8 @@
 #include "surface.h"
 
 enum {
-	EXAMPLE_MAX_TARGETS = 8,
+	EXAMPLE_MAX_TARGETS  = 8,
+	EXAMPLE_MAX_DISPLAYS = 8,
 };
 
 typedef struct example_target_s {
@@ -143,6 +144,14 @@ static void free_graphics(example_target_t *targets, u32 count)
 	}
 }
 
+static int fail_target_init(example_target_t *target)
+{
+	gfx_set_target(&target->gfx, &(gfx_target_t){.type = GFX_TARGET_NONE});
+	surface_free(&target->surface);
+	window_free(&target->window);
+	return -1;
+}
+
 static void on_event(display_t *display, const display_event_t *event, void *user)
 {
 	(void)display;
@@ -193,7 +202,7 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, u
 	target->driver = driver;
 	if (gfx_init(&target->gfx, driver, &(gfx_config_t){.proc = proc, .alloc = ALLOC_STD, .plan = &plan.gfx}) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize graphics driver: %s", driver->name);
-		goto error;
+		return fail_target_init(target);
 	}
 	if (surface_init(&target->surface,
 			 &(surface_config_t){
@@ -202,95 +211,80 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, u
 				 .alloc	  = ALLOC_STD,
 			 }) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize surface for graphics driver: %s", driver->name);
-		goto error;
+		return fail_target_init(target);
 	}
 	if (surface_config_window(&target->surface, &config)) {
 		log_error("csurface_example", "init", NULL, "failed to configure window for graphics driver: %s", driver->name);
-		goto error;
+		return fail_target_init(target);
 	}
 	if (window_init(&target->window, display, &config) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize window for graphics driver: %s", driver->name);
-		goto error;
+		return fail_target_init(target);
 	}
 	if (window_set_title(&target->window, strv_cstr(driver->name))) {
 		log_error("csurface_example", "init", NULL, "failed to set window title for graphics driver: %s", driver->name);
-		goto error;
+		return fail_target_init(target);
 	}
 	if (window_show(&target->window)) {
 		log_error("csurface_example", "init", NULL, "failed to show window for graphics driver: %s", driver->name);
-		goto error;
+		return fail_target_init(target);
 	}
 	if (surface_bind(&target->surface, &target->window)) {
 		log_error("csurface_example", "init", NULL, "failed to bind surface for graphics driver: %s", driver->name);
-		goto error;
+		return fail_target_init(target);
 	}
 	if (set_target_size(target, config.width, config.height)) {
 		log_error("csurface_example", "init", NULL, "failed to set surface target for graphics driver: %s", driver->name);
-		goto error;
+		return fail_target_init(target);
 	}
 	target->id	    = window_id(&target->window);
 	target->open	    = 1;
 	target->initialized = 1;
 
 	return 1;
-
-error:
-	gfx_set_target(&target->gfx, &(gfx_target_t){.type = GFX_TARGET_NONE});
-	surface_free(&target->surface);
-	window_free(&target->window);
-	return -1;
 }
 
-int main(void)
+static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t *proc, sock_t *sock)
 {
-	c_print_init();
-
-	log_t log = {0};
-	log_set(&log);
-	log_add_callback(log_std_cb, DST_STD(), LOG_ERROR, 1, 1);
-
-	fs_t fs					      = {0};
-	proc_t proc				      = {0};
-	sock_t sock				      = {0};
 	display_t display			      = {0};
 	gfx_driver_t *drivers[EXAMPLE_MAX_TARGETS]    = {0};
 	example_target_t targets[EXAMPLE_MAX_TARGETS] = {0};
 	u32 target_count			      = 0;
 	int ret					      = 0;
 
-	fs_init(&fs, 0, 0, ALLOC_STD);
-	proc_init(&proc, 0, 0, ALLOC_STD);
-	sock_init(&sock, 0, 0, ALLOC_STD);
+	if (display_driver == NULL || display_driver->native == NULL) {
+		return 0;
+	}
 
-	display_driver_t *driver = display_driver_find(STRV("X11-dynamic"));
-	if (driver == NULL) {
-		log_error("csurface_example", "init", NULL, "display driver not found: X11-dynamic");
-		ret = 1;
-	} else if (display_init(&display, driver, &fs, &proc, &sock, ALLOC_STD) == NULL) {
-		log_error("csurface_example", "init", NULL, "failed to initialize display");
-		ret = 1;
-	} else {
-		u32 driver_count = gfx_driver_list(drivers, sizeof(drivers) / sizeof(drivers[0]));
-		if (driver_count > sizeof(drivers) / sizeof(drivers[0])) {
-			driver_count = sizeof(drivers) / sizeof(drivers[0]);
-		}
-		for (u32 i = 0; i < driver_count; i++) {
-			int opened = open_target(&display, &proc, drivers[i], target_count, &targets[target_count]);
-			if (opened < 0) {
-				if (targets[target_count].gfx.drv != NULL) {
-					target_count++;
-				}
-				ret = 1;
-				break;
-			}
-			if (opened > 0) {
+	if (display_init(&display, display_driver, fs, proc, sock, ALLOC_STD) == NULL) {
+		log_error("csurface_example", "init", NULL, "failed to initialize display driver: %s", display_driver->name);
+		return 1;
+	}
+
+	u32 driver_count = gfx_driver_list(drivers, sizeof(drivers) / sizeof(drivers[0]));
+	if (driver_count > sizeof(drivers) / sizeof(drivers[0])) {
+		driver_count = sizeof(drivers) / sizeof(drivers[0]);
+	}
+	for (u32 i = 0; i < driver_count; i++) {
+		int opened = open_target(&display, proc, drivers[i], target_count, &targets[target_count]);
+		if (opened < 0) {
+			if (targets[target_count].gfx.drv != NULL) {
 				target_count++;
 			}
-		}
-		if (ret == 0 && target_count == 0) {
-			log_error("csurface_example", "init", NULL, "no graphics drivers are compatible with the display surface");
 			ret = 1;
+			break;
 		}
+		if (opened > 0) {
+			target_count++;
+		}
+	}
+	if (ret == 0 && target_count == 0) {
+		log_error("csurface_example",
+			  "init",
+			  NULL,
+			  "no graphics drivers are compatible with display driver: %s",
+			  display_driver->name);
+		ret = 1;
 	}
 
 	example_state_t state = {
@@ -303,7 +297,11 @@ int main(void)
 	}
 	while (ret == 0 && state.open > 0) {
 		if (display_wait_events(&display)) {
-			log_error("csurface_example", "event", NULL, "failed to wait for display events");
+			log_error("csurface_example",
+				  "event",
+				  NULL,
+				  "failed to wait for display events from driver: %s",
+				  display_driver->name);
 			ret = 1;
 			break;
 		}
@@ -313,7 +311,7 @@ int main(void)
 		}
 		destroy_closed(&state);
 		if (draw_all(targets, target_count)) {
-			log_error("csurface_example", "draw", NULL, "frame draw failed");
+			log_error("csurface_example", "draw", NULL, "frame draw failed for display driver: %s", display_driver->name);
 			ret = 1;
 		}
 	}
@@ -321,6 +319,52 @@ int main(void)
 	close_all(&state);
 	display_free(&display);
 	free_graphics(targets, target_count);
+	return ret;
+}
+
+int main(void)
+{
+	c_print_init();
+
+	log_t log = {0};
+	log_set(&log);
+	log_add_callback(log_std_cb, DST_STD(), LOG_ERROR, 1, 1);
+
+	fs_t fs						= {0};
+	proc_t proc					= {0};
+	sock_t sock					= {0};
+	display_driver_t *drivers[EXAMPLE_MAX_DISPLAYS] = {0};
+	int ret						= 0;
+
+	fs_init(&fs, 0, 0, ALLOC_STD);
+	proc_init(&proc, 0, 0, ALLOC_STD);
+	sock_init(&sock, 0, 0, ALLOC_STD);
+
+	u32 driver_count = display_driver_list(drivers, sizeof(drivers) / sizeof(drivers[0]));
+	if (driver_count > sizeof(drivers) / sizeof(drivers[0])) {
+		driver_count = sizeof(drivers) / sizeof(drivers[0]);
+	}
+	if (driver_count == 0) {
+		log_error("csurface_example", "init", NULL, "no display drivers found");
+		ret = 1;
+	} else {
+		u32 tried = 0;
+		for (u32 i = 0; i < driver_count; i++) {
+			if (drivers[i] == NULL || drivers[i]->native == NULL) {
+				continue;
+			}
+			tried++;
+			if (run_display_driver(drivers[i], &fs, &proc, &sock)) {
+				ret = 1;
+				break;
+			}
+		}
+		if (tried == 0) {
+			log_error("csurface_example", "init", NULL, "no native display drivers found");
+			ret = 1;
+		}
+	}
+
 	sock_free(&sock);
 	proc_free(&proc);
 	fs_free(&fs);

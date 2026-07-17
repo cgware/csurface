@@ -53,10 +53,7 @@ static void *t_display_native_display		   = (void *)0x1234;
 static int t_window_native_ret;
 static display_native_type_t t_window_native_type = DISPLAY_NATIVE_X11;
 static void *t_window_native_window		  = (void *)(uintptr_t)0x4321;
-static XVisualInfo t_glx_visual			  = {
-	.visualid = 0x12345678,
-	.depth	  = 24,
-};
+static XVisualInfo t_glx_visual			  = {.visualid = 0x12345678, .depth = 24};
 
 static void *t_surface_glx_symbol(t_surface_glx_symbol_t fn)
 {
@@ -302,7 +299,8 @@ TEST(surface_glx_init_rejects_non_opengl)
 	t_surface_glx_symbols(&proc);
 	gfx_driver_t drv = t_surface_glx_gfx_driver;
 	drv.api		 = -1;
-	gfx_t gfx	 = {
+
+	gfx_t gfx = {
 		.drv  = &drv,
 		.data = &proc,
 	};
