@@ -105,12 +105,8 @@ static int hresult_ok(HRESULT hr)
 
 static ULONG d3d11_release(void *object)
 {
-	if (object == NULL) {
-		return 0;
-	}
-
-	void ***iface = object;
-	ULONG (**vtable)(void *) = (ULONG (**)(void *))*iface;
+	void ***iface		 = object;
+	ULONG (**vtable)(void *) = (ULONG(**)(void *)) * iface;
 	return vtable[2](object);
 }
 
@@ -125,7 +121,7 @@ static int surface_d3d11_init(surface_t *srf, const surface_config_t *config)
 		return 1;
 	}
 
-	alloc_t alloc	       = config->alloc;
+	alloc_t alloc	     = config->alloc;
 	surface_d3d11_t *ctx = alloc_alloc(&alloc, sizeof(*ctx));
 	if (ctx == NULL) {
 		log_error("csurface", "surface_d3d11", NULL, "failed to allocate surface data");
@@ -229,14 +225,16 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 	}
 
 	DXGI_SWAP_CHAIN_DESC desc = {
-		.BufferDesc = {
-			.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-		},
-		.SampleDesc = {
-			.Count = 1,
-		},
-		.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
-		.BufferCount = SURFACE_D3D11_SWAPCHAIN_BUFFER_COUNT,
+		.BufferDesc =
+			{
+				.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+			},
+		.SampleDesc =
+			{
+				.Count = 1,
+			},
+		.BufferUsage  = DXGI_USAGE_RENDER_TARGET_OUTPUT,
+		.BufferCount  = SURFACE_D3D11_SWAPCHAIN_BUFFER_COUNT,
 		.OutputWindow = native_window.window,
 		.Windowed     = DXGI_SWAP_CHAIN_WINDOWED,
 		.SwapEffect   = DXGI_SWAP_EFFECT_DISCARD,
@@ -264,7 +262,7 @@ static int surface_d3d11_gfx_present(gfx_surface_t *surface)
 		return 1;
 	}
 
-	surface_d3d11_t *ctx	  = surface->data;
+	surface_d3d11_t *ctx	   = surface->data;
 	IDXGISwapChainVTable *swap = *(IDXGISwapChainVTable **)ctx->swapchain;
 	return hresult_ok(swap->Present(ctx->swapchain, 1, 0)) ? 0 : 1;
 }
@@ -284,11 +282,12 @@ static int surface_d3d11_native(surface_t *srf, surface_native_t *native)
 		.present = surface_d3d11_gfx_present,
 	};
 	ctx->gfx_surface.ops = &ops;
-	*native		     = (surface_native_t){
-			     .gfx_api     = GFX_API_D3D11,
-			     .native_type = DISPLAY_NATIVE_WINDOWS,
-			     .handle	     = (u64)(uintptr_t)ctx->swapchain,
-			     .gfx_surface = &ctx->gfx_surface,
+
+	*native = (surface_native_t){
+		.gfx_api     = GFX_API_D3D11,
+		.native_type = DISPLAY_NATIVE_WINDOWS,
+		.handle	     = (u64)(uintptr_t)ctx->swapchain,
+		.gfx_surface = &ctx->gfx_surface,
 	};
 	return 0;
 }
