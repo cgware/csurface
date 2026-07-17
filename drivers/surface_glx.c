@@ -8,6 +8,7 @@ typedef void Visual;
 typedef unsigned long Window;
 typedef unsigned long VisualID;
 typedef int Bool;
+typedef void *GLXContext;
 
 typedef struct XVisualInfo_s {
 	Visual *visual;
@@ -30,19 +31,27 @@ enum {
 typedef struct glx_s {
 	Bool (*XQueryVersion)(Display *, int *, int *);
 	XVisualInfo *(*XChooseVisual)(Display *, int, int *);
+	GLXContext (*XCreateContext)(Display *, XVisualInfo *, GLXContext, Bool);
+	void (*XDestroyContext)(Display *, GLXContext);
+	Bool (*XMakeCurrent)(Display *, Window, GLXContext);
+	void (*XSwapBuffers)(Display *, Window);
 } glx_t;
 
 typedef struct surface_glx_s {
+	proc_t *proc;
+	void *lib;
 	glx_t glx;
 	display_t *cdisplay;
 	Display *display;
 	XVisualInfo *visual;
 	Window window;
+	GLXContext context;
+	gfx_surface_t gfx_surface;
 } surface_glx_t;
 
-static int surface_glx_load_symbol(gfx_t *gfx, void **sym, strv_t name)
+static int surface_glx_load_symbol(surface_glx_t *ctx, void **sym, strv_t name)
 {
-	if (gfx_proc(gfx, name, sym)) {
+	if (proc_dlsym(ctx->proc, ctx->lib, name, sym)) {
 		log_error("csurface", "glx", NULL, "failed to load GLX symbol: %.*s", name.len, name.data);
 		return 1;
 	}
@@ -50,12 +59,21 @@ static int surface_glx_load_symbol(gfx_t *gfx, void **sym, strv_t name)
 	return 0;
 }
 
-#define LOAD_GLX(_gfx, _ctx, _name) surface_glx_load_symbol((_gfx), (void **)&(_ctx)->glx._name, STRV("gl" #_name))
+#define LOAD_GLX(_ctx, _name) surface_glx_load_symbol((_ctx), (void **)&(_ctx)->glx._name, STRV("gl" #_name))
 
-static int surface_glx_load(surface_glx_t *ctx, gfx_t *gfx)
+static int surface_glx_load(surface_glx_t *ctx, proc_t *proc)
 {
-	if (LOAD_GLX(gfx, ctx, XQueryVersion) || LOAD_GLX(gfx, ctx, XChooseVisual)) {
+	ctx->proc = proc;
+	if (proc_dlopen(ctx->proc, STRV("libGLX.so.0"), &ctx->lib) && proc_dlopen(ctx->proc, STRV("libGL.so.1"), &ctx->lib) &&
+	    proc_dlopen(ctx->proc, STRV("libGL.so"), &ctx->lib)) {
+		log_error("csurface", "glx", NULL, "failed to load GLX library");
+		return 1;
+	}
+	if (LOAD_GLX(ctx, XQueryVersion) || LOAD_GLX(ctx, XChooseVisual) || LOAD_GLX(ctx, XCreateContext) ||
+	    LOAD_GLX(ctx, XDestroyContext) || LOAD_GLX(ctx, XMakeCurrent) || LOAD_GLX(ctx, XSwapBuffers)) {
 		mem_set(&ctx->glx, 0, sizeof(ctx->glx));
+		proc_dlclose(ctx->proc, ctx->lib);
+		ctx->lib = NULL;
 		return 1;
 	}
 
@@ -81,7 +99,7 @@ static int surface_glx_init(surface_t *srf, const surface_config_t *config)
 	}
 	mem_set(ctx, 0, sizeof(*ctx));
 
-	if (surface_glx_load(ctx, config->gfx)) {
+	if (surface_glx_load(ctx, config->display->proc)) {
 		alloc_free(&alloc, ctx, sizeof(*ctx));
 		return 1;
 	}
@@ -97,7 +115,13 @@ static int surface_glx_unbind(surface_t *srf)
 	}
 
 	surface_glx_t *ctx = srf->data;
-	ctx->window	   = 0;
+	if (ctx->context != NULL) {
+		ctx->glx.XMakeCurrent(ctx->display, 0, NULL);
+		ctx->glx.XDestroyContext(ctx->display, ctx->context);
+	}
+	ctx->window	 = 0;
+	ctx->context	 = NULL;
+	ctx->gfx_surface = (gfx_surface_t){0};
 	return 0;
 }
 
@@ -112,6 +136,9 @@ static int surface_glx_free(surface_t *srf)
 	if (ctx->cdisplay != NULL && ctx->visual != NULL) {
 		display_native_free(ctx->cdisplay, ctx->visual);
 		ctx->visual = NULL;
+	}
+	if (ctx->lib != NULL) {
+		proc_dlclose(ctx->proc, ctx->lib);
 	}
 
 	alloc_free(&srf->config.alloc, ctx, sizeof(*ctx));
@@ -163,6 +190,8 @@ static int surface_glx_config_window(surface_t *srf, window_config_t *config)
 	return 0;
 }
 
+static const gfx_surface_ops_t surface_glx_gfx_ops;
+
 static int surface_glx_bind(surface_t *srf, window_t *window)
 {
 	if (srf == NULL || srf->data == NULL || window == NULL) {
@@ -185,8 +214,68 @@ static int surface_glx_bind(surface_t *srf, window_t *window)
 	}
 
 	ctx->window = (Window)(uintptr_t)native.window;
+	ctx->context = ctx->glx.XCreateContext(ctx->display, ctx->visual, NULL, 1);
+	if (ctx->context == NULL) {
+		ctx->window = 0;
+		log_error("csurface", "glx", NULL, "failed to create GLX context");
+		return 1;
+	}
+	ctx->gfx_surface = (gfx_surface_t){
+		.api	= GFX_API_OPENGL,
+		.handle = ctx->window,
+		.data	= ctx,
+		.ops	= &surface_glx_gfx_ops,
+	};
 	return 0;
 }
+
+static int surface_glx_gfx_proc(gfx_surface_t *surface, strv_t name, void **proc)
+{
+	if (surface == NULL || surface->data == NULL || proc == NULL) {
+		return 1;
+	}
+
+	surface_glx_t *ctx = surface->data;
+	return proc_dlsym(ctx->proc, ctx->lib, name, proc);
+}
+
+static int surface_glx_gfx_make_current(gfx_surface_t *surface)
+{
+	if (surface == NULL || surface->data == NULL) {
+		return 1;
+	}
+
+	surface_glx_t *ctx = surface->data;
+	return !ctx->glx.XMakeCurrent(ctx->display, ctx->window, ctx->context);
+}
+
+static int surface_glx_gfx_clear_current(gfx_surface_t *surface)
+{
+	if (surface == NULL || surface->data == NULL) {
+		return 1;
+	}
+
+	surface_glx_t *ctx = surface->data;
+	return !ctx->glx.XMakeCurrent(ctx->display, 0, NULL);
+}
+
+static int surface_glx_gfx_present(gfx_surface_t *surface)
+{
+	if (surface == NULL || surface->data == NULL) {
+		return 1;
+	}
+
+	surface_glx_t *ctx = surface->data;
+	ctx->glx.XSwapBuffers(ctx->display, ctx->window);
+	return 0;
+}
+
+static const gfx_surface_ops_t surface_glx_gfx_ops = {
+	.proc	       = surface_glx_gfx_proc,
+	.make_current  = surface_glx_gfx_make_current,
+	.clear_current = surface_glx_gfx_clear_current,
+	.present       = surface_glx_gfx_present,
+};
 
 static int surface_glx_native(surface_t *srf, surface_native_t *native)
 {
@@ -205,6 +294,7 @@ static int surface_glx_native(surface_t *srf, surface_native_t *native)
 		.display     = ctx->display,
 		.visual	     = ctx->visual,
 		.handle	     = ctx->window,
+		.gfx_surface = &ctx->gfx_surface,
 	};
 	return 0;
 }

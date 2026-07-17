@@ -25,6 +25,7 @@ typedef struct surface_native_s {
 	void *display;
 	void *visual;
 	u64 handle;
+	gfx_surface_t *gfx_surface;
 } surface_native_t;
 
 typedef struct surface_config_s {

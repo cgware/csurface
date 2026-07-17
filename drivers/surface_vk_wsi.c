@@ -43,6 +43,7 @@ typedef void (*PFN_vkDestroySurfaceKHR)(VkInstance, VkSurfaceKHR, const void *);
 typedef struct surface_vk_wsi_s {
 	VkInstance instance;
 	VkSurfaceKHR surface;
+	gfx_surface_t gfx_surface;
 	display_native_type_t native_type;
 	PFN_vkCreateXlibSurfaceKHR CreateXlibSurfaceKHR;
 	PFN_vkCreateWin32SurfaceKHR CreateWin32SurfaceKHR;
@@ -138,7 +139,8 @@ static int surface_vk_wsi_unbind(surface_t *srf)
 		ctx->DestroySurfaceKHR(ctx->instance, ctx->surface, NULL);
 		ctx->surface = 0;
 	}
-	ctx->native_type = DISPLAY_NATIVE_NONE;
+	ctx->gfx_surface = (gfx_surface_t){0};
+	ctx->native_type  = DISPLAY_NATIVE_NONE;
 	return 0;
 }
 
@@ -246,15 +248,25 @@ static int surface_vk_wsi_bind(surface_t *srf, window_t *window)
 		surface_vk_wsi_unbind(srf);
 	}
 
+	int ret = 1;
 	if (native_display.type == DISPLAY_NATIVE_X11) {
-		return surface_vk_wsi_bind_x11(srf, ctx, &native_display, &native_window);
+		ret = surface_vk_wsi_bind_x11(srf, ctx, &native_display, &native_window);
+	} else if (native_display.type == DISPLAY_NATIVE_WINDOWS) {
+		ret = surface_vk_wsi_bind_windows(srf, ctx, &native_display, &native_window);
+	} else {
+		log_error("csurface", "csurface_vk_wsi", NULL, "unsupported native display");
+		return 1;
 	}
-	if (native_display.type == DISPLAY_NATIVE_WINDOWS) {
-		return surface_vk_wsi_bind_windows(srf, ctx, &native_display, &native_window);
+	if (ret) {
+		return 1;
 	}
 
-	log_error("csurface", "csurface_vk_wsi", NULL, "unsupported native display");
-	return 1;
+	ctx->gfx_surface = (gfx_surface_t){
+		.api	= GFX_API_VULKAN,
+		.handle = ctx->surface,
+		.data	= ctx,
+	};
+	return 0;
 }
 
 static int surface_vk_wsi_native(surface_t *srf, surface_native_t *native)
@@ -272,6 +284,7 @@ static int surface_vk_wsi_native(surface_t *srf, surface_native_t *native)
 		.gfx_api     = GFX_API_VULKAN,
 		.native_type = ctx->native_type,
 		.handle	     = ctx->surface,
+		.gfx_surface = &ctx->gfx_surface,
 	};
 	return 0;
 }

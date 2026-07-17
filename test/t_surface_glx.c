@@ -242,7 +242,8 @@ static int t_surface_glx_open(proc_t *proc, gfx_t *gfx, display_t *display, surf
 		.data = proc,
 	};
 	*display = (display_t){
-		.drv = &t_surface_glx_display_driver,
+		.drv  = &t_surface_glx_display_driver,
+		.proc = proc,
 	};
 
 	return surface_init(surface,
@@ -262,7 +263,8 @@ static int t_surface_glx_open_driver(proc_t *proc, gfx_t *gfx, display_t *displa
 		.data = proc,
 	};
 	*display = (display_t){
-		.drv = &t_surface_glx_display_driver,
+		.drv  = &t_surface_glx_display_driver,
+		.proc = proc,
 	};
 
 	return surface_init_driver(surface,
@@ -305,7 +307,8 @@ TEST(surface_glx_init_rejects_non_opengl)
 		.data = &proc,
 	};
 	display_t display = {
-		.drv = &t_surface_glx_display_driver,
+		.drv  = &t_surface_glx_display_driver,
+		.proc = &proc,
 	};
 	surface_t surface = {0};
 
@@ -346,7 +349,8 @@ TEST(surface_glx_init_alloc_failure)
 		.data = &proc,
 	};
 	display_t display = {
-		.drv = &t_surface_glx_display_driver,
+		.drv  = &t_surface_glx_display_driver,
+		.proc = &proc,
 	};
 	surface_t surface = {0};
 
@@ -377,7 +381,8 @@ TEST(surface_glx_init_missing_symbol)
 		.data = &proc,
 	};
 	display_t display = {
-		.drv = &t_surface_glx_display_driver,
+		.drv  = &t_surface_glx_display_driver,
+		.proc = &proc,
 	};
 	surface_t surface = {0};
 
@@ -615,6 +620,11 @@ TEST(surface_glx_bind_sets_native_handle)
 	surface_native(&surface, &native);
 
 	EXPECT_EQ(native.handle, (u64)(uintptr_t)t_window_native_window);
+	EXPECT_NE(native.gfx_surface, NULL);
+	EXPECT_EQ(native.gfx_surface->api, GFX_API_OPENGL);
+	EXPECT_EQ(native.gfx_surface->handle, (u64)(uintptr_t)t_window_native_window);
+	EXPECT_NE(native.gfx_surface->data, NULL);
+	EXPECT_NE(native.gfx_surface->ops, NULL);
 
 	t_surface_glx_close(&proc, &surface);
 	END;
@@ -719,6 +729,8 @@ TEST(surface_glx_native_returns_display)
 
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 	EXPECT_EQ(native.display, t_display_native_display);
+	EXPECT_NE(native.gfx_surface, NULL);
+	EXPECT_EQ(native.gfx_surface->api, GFX_API_OPENGL);
 
 	t_surface_glx_close(&proc, &surface);
 	END;
@@ -742,6 +754,8 @@ TEST(surface_glx_native_returns_visual)
 
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 	EXPECT_EQ(native.visual, &t_glx_visual);
+	EXPECT_NE(native.gfx_surface, NULL);
+	EXPECT_EQ(native.gfx_surface->api, GFX_API_OPENGL);
 
 	t_surface_glx_close(&proc, &surface);
 	END;

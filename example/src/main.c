@@ -83,13 +83,11 @@ static int set_target_size(example_target_t *target, u16 width, u16 height)
 	}
 	if (gfx_set_target(&target->gfx,
 			   &(gfx_target_t){
-				   .type    = GFX_TARGET_SURFACE,
-				   .format  = GFX_FORMAT_RGBA8,
-				   .display = native.display,
-				   .visual  = native.visual,
-				   .surface = native.handle,
-				   .width   = width,
-				   .height  = height,
+				   .type	 = GFX_TARGET_SURFACE,
+				   .format	 = GFX_FORMAT_RGBA8,
+				   .surface = native.gfx_surface,
+				   .width	 = width,
+				   .height	 = height,
 			   })) {
 		return 1;
 	}
@@ -261,7 +259,8 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 		return 1;
 	}
 
-	u32 driver_count = gfx_driver_list(drivers, sizeof(drivers) / sizeof(drivers[0]));
+	u32 driver_count = 1;
+	drivers[0]	 = gfx_driver_find(STRV("opengl"));
 	if (driver_count > sizeof(drivers) / sizeof(drivers[0])) {
 		driver_count = sizeof(drivers) / sizeof(drivers[0]);
 	}
@@ -294,6 +293,10 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 	};
 	if (ret == 0) {
 		display_set_event_callback(&display, on_event, &state);
+		if (draw_all(targets, target_count)) {
+			log_error("csurface_example", "draw", NULL, "initial frame draw failed for display driver: %s", display_driver->name);
+			ret = 1;
+		}
 	}
 	while (ret == 0 && state.open > 0) {
 		if (display_wait_events(&display)) {

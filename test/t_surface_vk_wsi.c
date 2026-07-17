@@ -993,6 +993,10 @@ TEST(surface_vk_wsi_native_returns_handle)
 	surface_native(&surface, &native);
 
 	EXPECT_EQ(native.handle, 0x12345678);
+	EXPECT_NE(native.gfx_surface, NULL);
+	EXPECT_EQ(native.gfx_surface->api, GFX_API_VULKAN);
+	EXPECT_EQ(native.gfx_surface->handle, 0x12345678);
+	EXPECT_NE(native.gfx_surface->data, NULL);
 
 	t_surface_vk_wsi_close(&proc, &surface);
 	END;
