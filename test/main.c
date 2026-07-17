@@ -3,6 +3,7 @@
 #include "test.h"
 
 STEST(surface);
+STEST(surface_d3d11);
 STEST(surface_none);
 STEST(surface_glx);
 STEST(surface_wgl);
@@ -12,6 +13,7 @@ TEST(curface)
 {
 	SSTART;
 	RUN(surface);
+	RUN(surface_d3d11);
 	RUN(surface_none);
 	RUN(surface_glx);
 	RUN(surface_wgl);
