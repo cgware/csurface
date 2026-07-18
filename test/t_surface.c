@@ -157,7 +157,7 @@ TEST(surface_init_null_surface)
 {
 	START;
 
-	EXPECT_EQ(surface_init(NULL, &t_surface_config), NULL);
+	EXPECT_NULL(surface_init(NULL, &t_surface_config));
 
 	END;
 }
@@ -168,7 +168,7 @@ TEST(surface_init_null_driver)
 
 	surface_t srf = {0};
 
-	EXPECT_EQ(surface_init_driver(&srf, NULL, &t_surface_config), NULL);
+	EXPECT_NULL(surface_init_driver(&srf, NULL, &t_surface_config));
 
 	END;
 }
@@ -179,7 +179,7 @@ TEST(surface_init_null_config)
 
 	surface_t srf = {0};
 
-	EXPECT_EQ(surface_init(&srf, NULL), NULL);
+	EXPECT_NULL(surface_init(&srf, NULL));
 
 	END;
 }
@@ -212,7 +212,7 @@ TEST(surface_plan_skips_non_surface_driver)
 	display_t display   = {.drv = &t_surface_display_driver};
 	surface_plan_t plan = {0};
 
-	EXPECT_EQ(surface_plan(&plan, &(surface_plan_config_t){.display = &display, .gfx_api = (gfx_api_t)99}), 1);
+	EXPECT_EQ(surface_plan(&plan, &(surface_plan_config_t){.display = &display, .gfx_api = 99}), 1);
 
 	END;
 }
@@ -253,7 +253,7 @@ TEST(surface_init_calls_driver)
 	t_surface_reset();
 	surface_t srf = {0};
 
-	EXPECT_EQ(surface_init_driver(&srf, &t_surface_driver, &t_surface_config), &srf);
+	EXPECT_PTR(surface_init_driver(&srf, &t_surface_driver, &t_surface_config), &srf);
 	EXPECT_EQ(t_surface_init_calls, 1);
 
 	END;
@@ -267,9 +267,9 @@ TEST(surface_init_driver_failure_clears_fields)
 	t_surface_init_ret = 1;
 	surface_t srf	   = {0};
 
-	EXPECT_EQ(surface_init_driver(&srf, &t_surface_driver, &t_surface_config), NULL);
-	EXPECT_EQ(srf.drv, NULL);
-	EXPECT_EQ(srf.data, NULL);
+	EXPECT_NULL(surface_init_driver(&srf, &t_surface_driver, &t_surface_config));
+	EXPECT_NULL(srf.drv);
+	EXPECT_NULL(srf.data);
 
 	END;
 }
@@ -283,7 +283,7 @@ TEST(surface_init_gfx_api_failure)
 	surface_config_t config = t_surface_config;
 	config.gfx		= &gfx;
 
-	EXPECT_EQ(surface_init(&srf, &config), NULL);
+	EXPECT_NULL(surface_init(&srf, &config));
 
 	END;
 }
@@ -390,7 +390,7 @@ TEST(surface_init_no_compatible_driver)
 	drv.api			= -1;
 	t_surface_gfx.drv	= &drv;
 
-	EXPECT_EQ(surface_init(&srf, &config), NULL);
+	EXPECT_NULL(surface_init(&srf, &config));
 
 	t_surface_gfx.drv = &t_surface_gfx_driver;
 	END;

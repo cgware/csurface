@@ -260,7 +260,13 @@ static surface_driver_t *t_surface_d3d11_driver(void)
 
 static int t_surface_d3d11_init_surface(surface_t *surface)
 {
-	return surface_init(surface, &(surface_config_t){.display = &t_display, .gfx = &t_gfx, .alloc = ALLOC_STD}) != surface;
+	surface_config_t config = {
+		.display = &t_display,
+		.gfx	 = &t_gfx,
+		.alloc	 = ALLOC_STD,
+	};
+
+	return surface_init(surface, &config) != surface;
 }
 
 TEST(surface_d3d11_plan_accepts_windows)
@@ -295,7 +301,7 @@ TEST(surface_d3d11_init_null_config)
 	START;
 
 	surface_driver_t *drv = t_surface_d3d11_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 
 	EXPECT_EQ(drv->init(&(surface_t){0}, NULL), 1);
 
@@ -309,14 +315,14 @@ TEST(surface_d3d11_init_alloc_failure)
 	t_surface_d3d11_reset();
 	surface_t surface = {0};
 
+	surface_config_t config = {
+		.display = &t_display,
+		.gfx	 = &t_gfx,
+		.alloc	 = {.alloc = t_surface_d3d11_alloc_fail},
+	};
+
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_init(&surface,
-			       &(surface_config_t){
-				       .display = &t_display,
-				       .gfx	= &t_gfx,
-				       .alloc	= {.alloc = t_surface_d3d11_alloc_fail},
-			       }),
-		  NULL);
+	EXPECT_NULL(surface_init(&surface, &config));
 	log_set_quiet(0, 0);
 
 	t_surface_d3d11_cleanup();
@@ -328,7 +334,7 @@ TEST(surface_d3d11_unbind_null_data)
 	START;
 
 	surface_driver_t *drv = t_surface_d3d11_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	surface_t surface = {
 		.drv = drv,
 	};
@@ -343,7 +349,7 @@ TEST(surface_d3d11_free_null_data)
 	START;
 
 	surface_driver_t *drv = t_surface_d3d11_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	surface_t surface = {
 		.drv = drv,
 	};
@@ -358,7 +364,7 @@ TEST(surface_d3d11_config_window_null_data)
 	START;
 
 	surface_driver_t *drv = t_surface_d3d11_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	surface_t surface = {
 		.drv = drv,
 	};
@@ -393,7 +399,7 @@ TEST(surface_d3d11_bind_null_data)
 	START;
 
 	surface_driver_t *drv = t_surface_d3d11_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	surface_t surface = {
 		.drv = drv,
 	};
@@ -667,7 +673,7 @@ TEST(surface_d3d11_bind_passes_device)
 
 	surface_bind(&surface, &t_window);
 
-	EXPECT_EQ(t_create_swapchain_device, (void *)(uintptr_t)0x9876);
+	EXPECT_PTR(t_create_swapchain_device, (void *)(uintptr_t)0x9876);
 
 	surface_free(&surface);
 	t_surface_d3d11_cleanup();
@@ -747,7 +753,7 @@ TEST(surface_d3d11_native_null_data)
 	START;
 
 	surface_driver_t *drv = t_surface_d3d11_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	surface_native_t native = {0};
 
 	surface_t surface = {

@@ -35,7 +35,7 @@ TEST(surface_none_driver_is_registered)
 {
 	START;
 
-	EXPECT_NE(t_surface_none_driver(), NULL);
+	EXPECT_NOT_NULL(t_surface_none_driver());
 
 	END;
 }
@@ -45,7 +45,7 @@ TEST(surface_none_init_null_surface)
 	START;
 
 	surface_driver_t *drv = t_surface_none_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 
 	EXPECT_EQ(drv->init(NULL, &t_surface_none_config), 1);
 
@@ -58,8 +58,8 @@ TEST(surface_none_init_success)
 
 	surface_t surface = {0};
 
-	EXPECT_EQ(surface_init(&surface, &t_surface_none_config), &surface);
-	EXPECT_EQ(surface.drv, t_surface_none_driver());
+	EXPECT_PTR(surface_init(&surface, &t_surface_none_config), &surface);
+	EXPECT_PTR(surface.drv, t_surface_none_driver());
 
 	surface_free(&surface);
 	END;
@@ -70,7 +70,7 @@ TEST(surface_none_free_null_surface)
 	START;
 
 	surface_driver_t *drv = t_surface_none_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 
 	EXPECT_EQ(drv->free(NULL), 1);
 
