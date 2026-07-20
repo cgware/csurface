@@ -6,6 +6,8 @@
 #include "test.h"
 
 typedef void Display;
+typedef void wl_display;
+typedef void wl_surface;
 typedef unsigned long Window;
 typedef void *HINSTANCE;
 typedef void *HWND;
@@ -24,6 +26,14 @@ typedef struct VkXlibSurfaceCreateInfoKHR_s {
 	Window window;
 } VkXlibSurfaceCreateInfoKHR;
 
+typedef struct VkWaylandSurfaceCreateInfoKHR_s {
+	u32 sType;
+	const void *pNext;
+	u32 flags;
+	wl_display *display;
+	wl_surface *surface;
+} VkWaylandSurfaceCreateInfoKHR;
+
 typedef struct VkWin32SurfaceCreateInfoKHR_s {
 	u32 sType;
 	const void *pNext;
@@ -35,15 +45,19 @@ typedef struct VkWin32SurfaceCreateInfoKHR_s {
 typedef void (*t_surface_vk_wsi_symbol_t)(void);
 
 static int t_vk_create_xlib_surface_calls;
+static int t_vk_create_wayland_surface_calls;
 static int t_vk_create_win32_surface_calls;
 static int t_vk_destroy_surface_calls;
 static int t_vk_create_xlib_surface_ret;
+static int t_vk_create_wayland_surface_ret;
 static int t_vk_create_win32_surface_ret;
 static VkInstance t_vk_instance;
 static VkSurfaceKHR t_vk_surface;
 static VkSurfaceKHR t_vk_destroyed_surface;
 static Display *t_vk_xlib_display;
 static Window t_vk_xlib_window;
+static wl_display *t_vk_wayland_display;
+static wl_surface *t_vk_wayland_surface;
 static HINSTANCE t_vk_win32_instance;
 static HWND t_vk_win32_window;
 static int t_gfx_native_ret;
@@ -82,6 +96,18 @@ static int t_vkCreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCrea
 	t_vk_xlib_window  = create->window;
 	*surface	  = t_vk_surface;
 	return t_vk_create_xlib_surface_ret;
+}
+
+static int t_vkCreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR *create, const void *alloc,
+				       VkSurfaceKHR *surface)
+{
+	(void)alloc;
+	t_vk_create_wayland_surface_calls++;
+	t_vk_instance	     = instance;
+	t_vk_wayland_display = create->display;
+	t_vk_wayland_surface = create->surface;
+	*surface	     = t_vk_surface;
+	return t_vk_create_wayland_surface_ret;
 }
 
 static int t_vkCreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR *create, const void *alloc,
@@ -182,27 +208,31 @@ static surface_driver_t *t_surface_vk_wsi_driver(void)
 
 static void t_surface_vk_wsi_reset(void)
 {
-	t_vk_create_xlib_surface_calls	= 0;
-	t_vk_create_win32_surface_calls = 0;
-	t_vk_destroy_surface_calls	= 0;
-	t_vk_create_xlib_surface_ret	= VK_SUCCESS;
-	t_vk_create_win32_surface_ret	= VK_SUCCESS;
-	t_vk_instance			= 0;
-	t_vk_surface			= 0x12345678;
-	t_vk_destroyed_surface		= 0;
-	t_vk_xlib_display		= NULL;
-	t_vk_xlib_window		= 0;
-	t_vk_win32_instance		= NULL;
-	t_vk_win32_window		= NULL;
-	t_gfx_native_ret		= 0;
-	t_gfx_native_api		= GFX_API_VULKAN;
-	t_gfx_native_instance		= 0x9876;
-	t_display_native_ret		= 0;
-	t_display_native_type		= DISPLAY_NATIVE_X11;
-	t_display_native_display	= (void *)0x1111;
-	t_window_native_ret		= 0;
-	t_window_native_type		= DISPLAY_NATIVE_X11;
-	t_window_native_window		= (void *)(uintptr_t)0x2222;
+	t_vk_create_xlib_surface_calls	  = 0;
+	t_vk_create_wayland_surface_calls = 0;
+	t_vk_create_win32_surface_calls	  = 0;
+	t_vk_destroy_surface_calls	  = 0;
+	t_vk_create_xlib_surface_ret	  = VK_SUCCESS;
+	t_vk_create_wayland_surface_ret	  = VK_SUCCESS;
+	t_vk_create_win32_surface_ret	  = VK_SUCCESS;
+	t_vk_instance			  = 0;
+	t_vk_surface			  = 0x12345678;
+	t_vk_destroyed_surface		  = 0;
+	t_vk_xlib_display		  = NULL;
+	t_vk_xlib_window		  = 0;
+	t_vk_wayland_display		  = NULL;
+	t_vk_wayland_surface		  = NULL;
+	t_vk_win32_instance		  = NULL;
+	t_vk_win32_window		  = NULL;
+	t_gfx_native_ret		  = 0;
+	t_gfx_native_api		  = GFX_API_VULKAN;
+	t_gfx_native_instance		  = 0x9876;
+	t_display_native_ret		  = 0;
+	t_display_native_type		  = DISPLAY_NATIVE_X11;
+	t_display_native_display	  = (void *)0x1111;
+	t_window_native_ret		  = 0;
+	t_window_native_type		  = DISPLAY_NATIVE_X11;
+	t_window_native_window		  = (void *)(uintptr_t)0x2222;
 }
 
 static void t_surface_vk_wsi_symbols(proc_t *proc)
@@ -211,6 +241,10 @@ static void t_surface_vk_wsi_symbols(proc_t *proc)
 		      STRV("libvulkan.so.1"),
 		      STRV("vkCreateXlibSurfaceKHR"),
 		      t_surface_vk_wsi_symbol((t_surface_vk_wsi_symbol_t)t_vkCreateXlibSurfaceKHR));
+	proc_setdlsym(proc,
+		      STRV("libvulkan.so.1"),
+		      STRV("vkCreateWaylandSurfaceKHR"),
+		      t_surface_vk_wsi_symbol((t_surface_vk_wsi_symbol_t)t_vkCreateWaylandSurfaceKHR));
 	proc_setdlsym(proc,
 		      STRV("libvulkan.so.1"),
 		      STRV("vkCreateWin32SurfaceKHR"),
@@ -310,6 +344,21 @@ TEST(surface_vk_wsi_plan_windows_platform_extension)
 
 	EXPECT_EQ(surface_plan(&plan, &(surface_plan_config_t){.display = &display, .gfx_api = GFX_API_VULKAN}), 0);
 	EXPECT_EQ(t_strcmp(plan.gfx.instance_extensions[1], "VK_KHR_win32_surface"), 0);
+
+	END;
+}
+
+TEST(surface_vk_wsi_plan_wayland_platform_extension)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_display_native_type = DISPLAY_NATIVE_WAYLAND;
+	display_t display     = {.drv = &t_surface_vk_wsi_display_driver};
+	surface_plan_t plan   = {0};
+
+	EXPECT_EQ(surface_plan(&plan, &(surface_plan_config_t){.display = &display, .gfx_api = GFX_API_VULKAN}), 0);
+	EXPECT_EQ(t_strcmp(plan.gfx.instance_extensions[1], "VK_KHR_wayland_surface"), 0);
 
 	END;
 }
@@ -603,6 +652,25 @@ TEST(surface_vk_wsi_config_window_omits_background)
 	END;
 }
 
+TEST(surface_vk_wsi_config_window_accepts_wayland)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_display_native_type  = DISPLAY_NATIVE_WAYLAND;
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
+
+	EXPECT_EQ(surface_config_window(&surface, &config), 0);
+
+	t_surface_vk_wsi_close(&proc, &surface);
+	END;
+}
+
 TEST(surface_vk_wsi_bind_x11_creates_surface)
 {
 	START;
@@ -680,6 +748,78 @@ TEST(surface_vk_wsi_bind_windows_creates_surface)
 	surface_bind(&surface, &window);
 
 	EXPECT_EQ(t_vk_create_win32_surface_calls, 1);
+
+	t_surface_vk_wsi_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_vk_wsi_bind_wayland_creates_surface)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_display_native_type	 = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type	 = DISPLAY_NATIVE_WAYLAND;
+	t_display_native_display = (void *)0x3333;
+	t_window_native_window	 = (void *)0x4444;
+	proc_t proc		 = {0};
+	gfx_t gfx		 = {0};
+	display_t display	 = {0};
+	surface_t surface	 = {0};
+	window_t window		 = {.display = &display};
+	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
+
+	surface_bind(&surface, &window);
+
+	EXPECT_EQ(t_vk_create_wayland_surface_calls, 1);
+
+	t_surface_vk_wsi_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_vk_wsi_bind_wayland_passes_display)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_display_native_type	 = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type	 = DISPLAY_NATIVE_WAYLAND;
+	t_display_native_display = (void *)0x3333;
+	t_window_native_window	 = (void *)0x4444;
+	proc_t proc		 = {0};
+	gfx_t gfx		 = {0};
+	display_t display	 = {0};
+	surface_t surface	 = {0};
+	window_t window		 = {.display = &display};
+	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
+
+	surface_bind(&surface, &window);
+
+	EXPECT_EQ(t_vk_wayland_display, (wl_display *)0x3333);
+
+	t_surface_vk_wsi_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_vk_wsi_bind_wayland_passes_surface)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_display_native_type	 = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type	 = DISPLAY_NATIVE_WAYLAND;
+	t_display_native_display = (void *)0x3333;
+	t_window_native_window	 = (void *)0x4444;
+	proc_t proc		 = {0};
+	gfx_t gfx		 = {0};
+	display_t display	 = {0};
+	surface_t surface	 = {0};
+	window_t window		 = {.display = &display};
+	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
+
+	surface_bind(&surface, &window);
+
+	EXPECT_EQ(t_vk_wayland_surface, (wl_surface *)0x4444);
 
 	t_surface_vk_wsi_close(&proc, &surface);
 	END;
@@ -865,6 +1005,107 @@ TEST(surface_vk_wsi_bind_windows_missing_display_handle)
 	END;
 }
 
+TEST(surface_vk_wsi_bind_wayland_missing_display_handle)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_display_native_type	 = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type	 = DISPLAY_NATIVE_WAYLAND;
+	t_display_native_display = NULL;
+	proc_t proc		 = {0};
+	gfx_t gfx		 = {0};
+	display_t display	 = {0};
+	surface_t surface	 = {0};
+	window_t window		 = {.display = &display};
+	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_vk_wsi_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_vk_wsi_bind_wayland_missing_window_handle)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_display_native_type  = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type   = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_window = NULL;
+	proc_t proc	       = {0};
+	gfx_t gfx	       = {0};
+	display_t display      = {0};
+	surface_t surface      = {0};
+	window_t window	       = {.display = &display};
+	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_vk_wsi_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_vk_wsi_bind_wayland_missing_create_symbol)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_display_native_type = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type  = DISPLAY_NATIVE_WAYLAND;
+	proc_t proc	      = {0};
+	proc_init(&proc, 0, 1, ALLOC_STD);
+	proc_setdlsym(&proc,
+		      STRV("libvulkan.so.1"),
+		      STRV("vkDestroySurfaceKHR"),
+		      t_surface_vk_wsi_symbol((t_surface_vk_wsi_symbol_t)t_vkDestroySurfaceKHR));
+	gfx_t gfx		= {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
+	display_t display	= {.drv = &t_surface_vk_wsi_display_driver};
+	surface_t surface	= {0};
+	window_t window		= {.display = &display};
+	surface_config_t config = {
+		.display = &display,
+		.gfx	 = &gfx,
+		.alloc	 = ALLOC_STD,
+	};
+	EXPECT_NOT_NULL(surface_init_driver(&surface, t_surface_vk_wsi_driver(), &config));
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_vk_wsi_close(&proc, &surface);
+	END;
+}
+
+TEST(surface_vk_wsi_bind_wayland_create_failure)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_display_native_type = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type  = DISPLAY_NATIVE_WAYLAND;
+	proc_t proc	      = {0};
+	gfx_t gfx	      = {0};
+	display_t display     = {0};
+	surface_t surface     = {0};
+	window_t window	      = {.display = &display};
+	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
+	t_vk_create_wayland_surface_ret = 1;
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_vk_wsi_close(&proc, &surface);
+	END;
+}
+
 TEST(surface_vk_wsi_bind_windows_missing_window_handle)
 {
 	START;
@@ -1041,6 +1282,30 @@ TEST(surface_vk_wsi_native_returns_handle)
 	END;
 }
 
+TEST(surface_vk_wsi_native_wayland_type)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_display_native_type = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type  = DISPLAY_NATIVE_WAYLAND;
+	proc_t proc	      = {0};
+	gfx_t gfx	      = {0};
+	display_t display     = {0};
+	surface_t surface     = {0};
+	window_t window	      = {.display = &display};
+	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
+	surface_bind(&surface, &window);
+
+	surface_native_t native = {0};
+	surface_native(&surface, &native);
+
+	EXPECT_EQ(native.native_type, DISPLAY_NATIVE_WAYLAND);
+
+	t_surface_vk_wsi_close(&proc, &surface);
+	END;
+}
+
 TEST(surface_vk_wsi_native_without_bind)
 {
 	START;
@@ -1106,6 +1371,7 @@ STEST(surface_vk_wsi)
 	RUN(surface_vk_wsi_plan_x11_platform_extension);
 	RUN(surface_vk_wsi_plan_has_no_device_extensions);
 	RUN(surface_vk_wsi_plan_windows_platform_extension);
+	RUN(surface_vk_wsi_plan_wayland_platform_extension);
 	RUN(surface_vk_wsi_plan_rejects_non_vulkan);
 	RUN(surface_vk_wsi_plan_rejects_null_plan);
 	RUN(surface_vk_wsi_init_rejects_non_vulkan);
@@ -1121,9 +1387,13 @@ STEST(surface_vk_wsi)
 	RUN(surface_vk_wsi_config_window_sets_depth);
 	RUN(surface_vk_wsi_config_window_sets_visual);
 	RUN(surface_vk_wsi_config_window_omits_background);
+	RUN(surface_vk_wsi_config_window_accepts_wayland);
 	RUN(surface_vk_wsi_bind_x11_creates_surface);
 	RUN(surface_vk_wsi_bind_x11_passes_window);
 	RUN(surface_vk_wsi_bind_windows_creates_surface);
+	RUN(surface_vk_wsi_bind_wayland_creates_surface);
+	RUN(surface_vk_wsi_bind_wayland_passes_display);
+	RUN(surface_vk_wsi_bind_wayland_passes_surface);
 	RUN(surface_vk_wsi_bind_null_surface);
 	RUN(surface_vk_wsi_bind_display_unavailable);
 	RUN(surface_vk_wsi_bind_window_unavailable);
@@ -1131,6 +1401,10 @@ STEST(surface_vk_wsi)
 	RUN(surface_vk_wsi_bind_x11_missing_window_handle);
 	RUN(surface_vk_wsi_bind_x11_missing_create_symbol);
 	RUN(surface_vk_wsi_bind_x11_create_failure);
+	RUN(surface_vk_wsi_bind_wayland_missing_display_handle);
+	RUN(surface_vk_wsi_bind_wayland_missing_window_handle);
+	RUN(surface_vk_wsi_bind_wayland_missing_create_symbol);
+	RUN(surface_vk_wsi_bind_wayland_create_failure);
 	RUN(surface_vk_wsi_bind_windows_missing_display_handle);
 	RUN(surface_vk_wsi_bind_windows_missing_window_handle);
 	RUN(surface_vk_wsi_bind_windows_missing_create_symbol);
@@ -1139,6 +1413,7 @@ STEST(surface_vk_wsi)
 	RUN(surface_vk_wsi_bind_replaces_surface);
 	RUN(surface_vk_wsi_unbind_destroys_surface);
 	RUN(surface_vk_wsi_native_returns_handle);
+	RUN(surface_vk_wsi_native_wayland_type);
 	RUN(surface_vk_wsi_native_without_bind);
 	RUN(surface_vk_wsi_native_null_native);
 	RUN(surface_vk_wsi_free_destroys_surface);

@@ -364,6 +364,9 @@ int main(void)
 			if (drivers[i] == NULL || drivers[i]->native == NULL) {
 				continue;
 			}
+			if (!display_driver_available(drivers[i], &proc)) {
+				continue;
+			}
 			tried++;
 			if (run_display_driver(drivers[i], &fs, &proc, &sock)) {
 				ret = 1;
