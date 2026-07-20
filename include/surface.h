@@ -41,8 +41,10 @@ typedef struct surface_s {
 } surface_t;
 
 int surface_plan(surface_plan_t *plan, const surface_plan_config_t *config);
+
 surface_t *surface_init(surface_t *srf, const surface_config_t *config);
 void surface_free(surface_t *srf);
+
 int surface_config_window(surface_t *srf, window_config_t *config);
 int surface_bind(surface_t *srf, window_t *window);
 int surface_unbind(surface_t *srf);
