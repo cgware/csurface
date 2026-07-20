@@ -732,6 +732,25 @@ TEST(surface_d3d11_native_sets_api)
 	END;
 }
 
+TEST(surface_d3d11_native_returns_ops)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	EXPECT_NOT_NULL(native.gfx_surface->ops);
+	EXPECT_EQ(native.gfx_surface->ops->present == NULL, 0);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
 TEST(surface_d3d11_native_without_bind)
 {
 	START;
@@ -853,6 +872,7 @@ STEST(surface_d3d11)
 	RUN(surface_d3d11_unbind_releases_swapchain);
 	RUN(surface_d3d11_unbind_releases_factory);
 	RUN(surface_d3d11_native_sets_api);
+	RUN(surface_d3d11_native_returns_ops);
 	RUN(surface_d3d11_native_without_bind);
 	RUN(surface_d3d11_native_null_data);
 	RUN(surface_d3d11_gfx_present_calls_swapchain);

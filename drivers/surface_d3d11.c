@@ -192,6 +192,8 @@ static int surface_d3d11_load(surface_t *srf, surface_d3d11_t *ctx)
 	return 0;
 }
 
+static const gfx_surface_ops_t surface_d3d11_gfx_ops;
+
 static int surface_d3d11_bind(surface_t *srf, window_t *window)
 {
 	if (srf == NULL || srf->data == NULL || window == NULL) {
@@ -252,6 +254,7 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 		.api	= GFX_API_D3D11,
 		.handle = (u64)(uintptr_t)ctx->swapchain,
 		.data	= ctx,
+		.ops	= &surface_d3d11_gfx_ops,
 	};
 	return 0;
 }
@@ -267,6 +270,10 @@ static int surface_d3d11_gfx_present(gfx_surface_t *surface)
 	return hresult_ok(swap->Present(ctx->swapchain, 1, 0)) ? 0 : 1;
 }
 
+static const gfx_surface_ops_t surface_d3d11_gfx_ops = {
+	.present = surface_d3d11_gfx_present,
+};
+
 static int surface_d3d11_native(surface_t *srf, surface_native_t *native)
 {
 	if (srf == NULL || srf->data == NULL || native == NULL) {
@@ -277,11 +284,6 @@ static int surface_d3d11_native(surface_t *srf, surface_native_t *native)
 	if (ctx->swapchain == NULL) {
 		return 1;
 	}
-
-	static const gfx_surface_ops_t ops = {
-		.present = surface_d3d11_gfx_present,
-	};
-	ctx->gfx_surface.ops = &ops;
 
 	*native = (surface_native_t){
 		.gfx_api     = GFX_API_D3D11,
