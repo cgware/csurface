@@ -29,14 +29,49 @@ typedef struct example_state_s {
 	int failed;
 } example_state_t;
 
-static int draw(gfx_t *gfx)
+static int draw(example_target_t *target)
 {
+	if (target == NULL) {
+		return 1;
+	}
+
+	gfx_t *gfx = &target->gfx;
+	gfx_vertex_2d_t vertices[3] = {
+		{
+			.x = (float)target->width * 0.5f,
+			.y = (float)target->height * 0.15f,
+			.r = 1.0f,
+			.a = 1.0f,
+		},
+		{
+			.x = (float)target->width * 0.85f,
+			.y = (float)target->height * 0.85f,
+			.g = 1.0f,
+			.a = 1.0f,
+		},
+		{
+			.x = (float)target->width * 0.15f,
+			.y = (float)target->height * 0.85f,
+			.b = 1.0f,
+			.a = 1.0f,
+		},
+	};
 	if (gfx_clear_color(gfx, 0.1f, 0.2f, 0.3f, 1.0f)) {
 		log_error("csurface_example", "draw", NULL, "failed to set clear color");
 		return 1;
 	}
+	if (gfx_viewport(gfx, 0, 0, target->width, target->height)) {
+		log_error("csurface_example", "draw", NULL, "failed to set viewport");
+		return 1;
+	}
 	if (gfx_clear(gfx, GFX_CLEAR_COLOR_BUFFER)) {
 		log_error("csurface_example", "draw", NULL, "failed to clear color buffer");
+		return 1;
+	}
+	if ((target->driver->api == GFX_API_SOFTWARE || target->driver->api == GFX_API_OPENGL || target->driver->api == GFX_API_VULKAN ||
+	     target->driver->api == GFX_API_NONE) &&
+	    gfx_draw_triangle_2d(gfx, vertices)) {
+		log_error("csurface_example", "draw", NULL, "failed to draw triangle");
 		return 1;
 	}
 	if (gfx_present(gfx)) {
@@ -53,7 +88,7 @@ static int draw_all(example_target_t *targets, u32 count)
 		if (!targets[i].open) {
 			continue;
 		}
-		if (draw(&targets[i].gfx)) {
+		if (draw(&targets[i])) {
 			log_error("csurface_example", "draw", NULL, "failed to draw with graphics driver: %s", targets[i].driver->name);
 			return 1;
 		}
