@@ -1,6 +1,7 @@
 #include "display_driver.h"
 #include "gfx_driver.h"
 #include "log.h"
+#include "monitor.h"
 #include "surface.h"
 
 enum {
@@ -35,7 +36,7 @@ static int draw(example_target_t *target)
 		return 1;
 	}
 
-	gfx_t *gfx = &target->gfx;
+	gfx_t *gfx		    = &target->gfx;
 	gfx_vertex_2d_t vertices[3] = {
 		{
 			.x = (float)target->width * 0.5f,
@@ -79,6 +80,45 @@ static int draw(example_target_t *target)
 		return 1;
 	}
 
+	return 0;
+}
+
+static int window_position(u16 *position, s32 origin, u32 offset)
+{
+	s64 value = (s64)origin + offset;
+	if (position == NULL || value < U16_MIN || value > U16_MAX) {
+		return 1;
+	}
+
+	*position = (u16)value;
+	return 0;
+}
+
+static int print_monitors(display_t *display, const char *driver_name, display_monitor_t *show_monitor, int *has_monitor)
+{
+	arr_t monitors = {0};
+	if (has_monitor != NULL) {
+		*has_monitor = 0;
+	}
+	if (arr_init(&monitors, 1, sizeof(display_monitor_t), ALLOC_STD) == NULL) {
+		return 1;
+	}
+	if (display_monitors(display, &monitors)) {
+		arr_free(&monitors);
+		return 1;
+	}
+
+	dputf(DST_STD(), "%s monitors:\n", driver_name);
+	for (u32 i = 0; i < monitors.cnt; i++) {
+		monitor_print(arr_get(&monitors, i), DST_STD());
+	}
+	if (monitors.cnt > 0 && show_monitor != NULL && has_monitor != NULL) {
+		display_monitor_t *monitor = arr_get(&monitors, 2 >= monitors.cnt ? 0 : 2);
+		*show_monitor		   = *monitor;
+		*has_monitor		   = 1;
+	}
+
+	arr_free(&monitors);
 	return 0;
 }
 
@@ -396,11 +436,20 @@ static void on_event(display_t *display, const display_event_t *event, void *use
 	}
 }
 
-static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, u32 index, example_target_t *target)
+static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, const display_monitor_t *monitor, u32 index,
+		       example_target_t *target)
 {
+	u16 x = 0;
+	u16 y = 0;
+	if (window_position(&x, monitor != NULL ? monitor->x : 0, 100 + index * 40) ||
+	    window_position(&y, monitor != NULL ? monitor->y : 0, 100 + index * 40)) {
+		log_error("csurface_example", "init", NULL, "failed to place window for graphics driver: %s", driver->name);
+		return -1;
+	}
+
 	window_config_t config = {
-		.x	= (u16)(100 + index * 40),
-		.y	= (u16)(100 + index * 40),
+		.x	= x,
+		.y	= y,
 		.width	= 640,
 		.height = 480,
 	};
@@ -459,6 +508,13 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 		log_error("csurface_example", "init", NULL, "failed to initialize display driver: %s", display_driver->name);
 		return 1;
 	}
+	display_monitor_t show_monitor = {0};
+	int has_monitor		       = 0;
+	if (print_monitors(&display, display_driver->name, &show_monitor, &has_monitor)) {
+		log_error("csurface_example", "init", NULL, "failed to list monitors for display driver: %s", display_driver->name);
+		display_free(&display);
+		return 1;
+	}
 
 	u32 driver_count = gfx_driver_list(drivers, sizeof(drivers) / sizeof(drivers[0]));
 	if (driver_count > sizeof(drivers) / sizeof(drivers[0])) {
@@ -468,7 +524,8 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 		if (drivers[i] == NULL) {
 			continue;
 		}
-		int opened = open_target(&display, proc, drivers[i], target_count, &targets[target_count]);
+		int opened =
+			open_target(&display, proc, drivers[i], has_monitor ? &show_monitor : NULL, target_count, &targets[target_count]);
 		if (opened < 0) {
 			if (targets[target_count].gfx.drv != NULL) {
 				target_count++;
