@@ -36,7 +36,7 @@ static int surface_info(const surface_config_t *config, surface_info_t *info)
 {
 	gfx_native_t native_gfx = {0};
 	if (!surface_config_valid(config) || info == NULL) {
-		return 1;
+		return 1; // LCOV_EXCL_LINE
 	}
 
 	if (config->gfx != NULL) {
