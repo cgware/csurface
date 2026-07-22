@@ -393,14 +393,15 @@ static int surface_wgl_native(surface_t *srf, surface_native_t *native)
 }
 
 static surface_driver_t surface_wgl = {
-	.name	       = "wgl",
-	.compatible    = surface_wgl_compatible,
-	.init	       = surface_wgl_init,
-	.free	       = surface_wgl_free,
-	.config_window = surface_wgl_config_window,
-	.bind	       = surface_wgl_bind,
-	.unbind	       = surface_wgl_unbind,
-	.native	       = surface_wgl_native,
+	.name		= "wgl",
+	.gfx_init_order = SURFACE_GFX_INIT_AFTER_BIND,
+	.compatible	= surface_wgl_compatible,
+	.init		= surface_wgl_init,
+	.free		= surface_wgl_free,
+	.config_window	= surface_wgl_config_window,
+	.bind		= surface_wgl_bind,
+	.unbind		= surface_wgl_unbind,
+	.native		= surface_wgl_native,
 };
 
 SURFACE_DRIVER(surface_wgl, &surface_wgl);

@@ -31,8 +31,16 @@ typedef struct surface_native_s {
 typedef struct surface_config_s {
 	display_t *display;
 	gfx_t *gfx;
+	gfx_api_t gfx_api;
 	alloc_t alloc;
 } surface_config_t;
+
+typedef struct surface_gfx_config_s {
+	display_t *display;
+	proc_t *proc;
+	const struct gfx_driver_s *driver;
+	alloc_t alloc;
+} surface_gfx_config_t;
 
 typedef struct surface_s {
 	const struct surface_driver_s *drv;
@@ -41,6 +49,10 @@ typedef struct surface_s {
 } surface_t;
 
 int surface_plan(surface_plan_t *plan, const surface_plan_config_t *config);
+
+int surface_gfx_supported(const surface_gfx_config_t *config);
+int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *config);
+int surface_gfx_bind(surface_t *srf, gfx_t *gfx, window_t *window, const surface_gfx_config_t *config);
 
 surface_t *surface_init(surface_t *srf, const surface_config_t *config);
 void surface_free(surface_t *srf);

@@ -69,9 +69,7 @@ static int draw(example_target_t *target)
 		log_error("csurface_example", "draw", NULL, "failed to clear color buffer");
 		return 1;
 	}
-	if ((target->driver->api == GFX_API_SOFTWARE || target->driver->api == GFX_API_OPENGL || target->driver->api == GFX_API_VULKAN ||
-	     target->driver->api == GFX_API_NONE) &&
-	    gfx_draw_triangle_2d(gfx, vertices)) {
+	if (target->driver->draw_triangle_2d != NULL && gfx_draw_triangle_2d(gfx, vertices)) {
 		log_error("csurface_example", "draw", NULL, "failed to draw triangle");
 		return 1;
 	}
@@ -176,30 +174,30 @@ static void clear_target_graphics(example_target_t *target)
 	target->driver = NULL;
 }
 
+static surface_gfx_config_t target_graphics_config(display_t *display, proc_t *proc, gfx_driver_t *driver)
+{
+	return (surface_gfx_config_t){
+		.display = display,
+		.proc	 = proc,
+		.driver	 = driver,
+		.alloc	 = ALLOC_STD,
+	};
+}
+
 static int init_target_graphics(display_t *display, proc_t *proc, gfx_driver_t *driver, example_target_t *target)
 {
 	if (display == NULL || proc == NULL || driver == NULL || target == NULL) {
 		return -1;
 	}
 
-	surface_plan_t plan = {0};
-	if (surface_plan(&plan, &(surface_plan_config_t){.display = display, .gfx_api = driver->api})) {
+	surface_gfx_config_t config = target_graphics_config(display, proc, driver);
+	if (!surface_gfx_supported(&config)) {
 		return 0;
 	}
 
 	target->driver = driver;
-	if (gfx_init(&target->gfx, driver, &(gfx_config_t){.proc = proc, .alloc = ALLOC_STD, .plan = &plan.gfx}) == NULL) {
-		log_error("csurface_example", "init", NULL, "failed to initialize graphics driver: %s", driver->name);
-		clear_target_graphics(target);
-		return -1;
-	}
-	if (surface_init(&target->surface,
-			 &(surface_config_t){
-				 .display = display,
-				 .gfx	  = &target->gfx,
-				 .alloc	  = ALLOC_STD,
-			 }) == NULL) {
-		log_error("csurface_example", "init", NULL, "failed to initialize surface for graphics driver: %s", driver->name);
+	if (surface_gfx_init(&target->surface, &target->gfx, &config)) {
+		log_error("csurface_example", "init", NULL, "failed to initialize surface graphics for driver: %s", driver->name);
 		clear_target_graphics(target);
 		return -1;
 	}
@@ -258,12 +256,22 @@ static int fail_target_init(example_target_t *target)
 	return -1;
 }
 
-static int restore_target_graphics(example_target_t *target)
+static int bind_target_graphics(display_t *display, proc_t *proc, example_target_t *target, window_t *window)
 {
-	if (target == NULL) {
+	if (display == NULL || proc == NULL || target == NULL || target->driver == NULL || window == NULL) {
 		return 1;
 	}
-	if (surface_bind(&target->surface, &target->window)) {
+
+	surface_gfx_config_t config = target_graphics_config(display, proc, target->driver);
+	return surface_gfx_bind(&target->surface, &target->gfx, window, &config);
+}
+
+static int restore_target_graphics(example_state_t *state, example_target_t *target)
+{
+	if (state == NULL || target == NULL) {
+		return 1;
+	}
+	if (bind_target_graphics(state->display, state->proc, target, &target->window)) {
 		return 1;
 	}
 	return set_target_size(target, target->width, target->height);
@@ -271,7 +279,7 @@ static int restore_target_graphics(example_target_t *target)
 
 static int switch_target_graphics(example_state_t *state, example_target_t *target, gfx_driver_t *driver)
 {
-	if (state == NULL || target == NULL || driver == NULL || target->driver == NULL || driver->api == target->driver->api) {
+	if (state == NULL || target == NULL || driver == NULL || target->driver == NULL || driver == target->driver) {
 		return 0;
 	}
 
@@ -295,9 +303,10 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 		clear_target_graphics(&next);
 		return -1;
 	}
-	if (surface_bind(&next.surface, &target->window) || set_target_size(&next, target->width, target->height)) {
+	if (bind_target_graphics(state->display, state->proc, &next, &target->window) ||
+	    set_target_size(&next, target->width, target->height)) {
 		clear_target_graphics(&next);
-		if (restore_target_graphics(target)) {
+		if (restore_target_graphics(state, target)) {
 			return -1;
 		}
 		return 0;
@@ -477,7 +486,7 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, c
 		log_error("csurface_example", "init", NULL, "failed to show window for graphics driver: %s", driver->name);
 		return fail_target_init(target);
 	}
-	if (surface_bind(&target->surface, &target->window)) {
+	if (bind_target_graphics(display, proc, target, &target->window)) {
 		log_error("csurface_example", "init", NULL, "failed to bind surface for graphics driver: %s", driver->name);
 		return fail_target_init(target);
 	}

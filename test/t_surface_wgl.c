@@ -84,6 +84,9 @@ static void *t_display_native_display;
 static int t_window_native_ret;
 static display_native_type_t t_window_native_type;
 static void *t_window_native_window;
+static int t_surface_wgl_gfx_init_calls;
+static int t_surface_wgl_gfx_free_calls;
+static gfx_surface_t *t_surface_wgl_gfx_init_surface;
 
 static void *t_surface_wgl_symbol(t_surface_wgl_symbol_t fn)
 {
@@ -217,6 +220,21 @@ static gfx_driver_t t_surface_wgl_gfx_driver = {
 	.api  = GFX_API_OPENGL,
 };
 
+static int t_surface_wgl_gfx_init(gfx_t *gfx, const gfx_config_t *config)
+{
+	t_surface_wgl_gfx_init_calls++;
+	t_surface_wgl_gfx_init_surface = config != NULL ? config->surface : NULL;
+	gfx->data		      = (void *)0x2468;
+	return 0;
+}
+
+static int t_surface_wgl_gfx_free(gfx_t *gfx)
+{
+	t_surface_wgl_gfx_free_calls++;
+	gfx->data = NULL;
+	return 0;
+}
+
 static surface_driver_t *t_surface_wgl_driver(void)
 {
 	for (driver_t *i = DRIVER_START; i < DRIVER_END; i++) {
@@ -269,6 +287,11 @@ static void t_surface_wgl_reset(void)
 	t_window_native_ret	 = 0;
 	t_window_native_type	 = DISPLAY_NATIVE_WINDOWS;
 	t_window_native_window	 = (void *)0x1234;
+	t_surface_wgl_gfx_init_calls = 0;
+	t_surface_wgl_gfx_free_calls = 0;
+	t_surface_wgl_gfx_init_surface = NULL;
+	t_surface_wgl_gfx_driver.init = NULL;
+	t_surface_wgl_gfx_driver.free = NULL;
 }
 
 static void t_surface_wgl_symbols(proc_t *proc)
@@ -331,6 +354,55 @@ TEST(surface_wgl_driver_is_registered)
 
 	EXPECT_NOT_NULL(t_surface_wgl_driver());
 
+	END;
+}
+
+TEST(surface_wgl_gfx_init_order_is_after_bind)
+{
+	START;
+
+	surface_driver_t *drv = t_surface_wgl_driver();
+	EXPECT_NOT_NULL(drv);
+	EXPECT_EQ(drv->gfx_init_order, SURFACE_GFX_INIT_AFTER_BIND);
+
+	END;
+}
+
+TEST(surface_wgl_gfx_bind_initializes_gfx_with_bound_surface)
+{
+	START;
+
+	t_surface_wgl_reset();
+	t_surface_wgl_gfx_driver.init = t_surface_wgl_gfx_init;
+	t_surface_wgl_gfx_driver.free = t_surface_wgl_gfx_free;
+	proc_t proc		    = {0};
+	display_t display	    = {.drv = &t_surface_wgl_display_driver, .proc = &proc};
+	gfx_t gfx		    = {0};
+	surface_t surface	    = {0};
+	window_t window		    = {.display = &display};
+	surface_gfx_config_t config = {
+		.display = &display,
+		.proc	 = &proc,
+		.driver	 = &t_surface_wgl_gfx_driver,
+		.alloc	 = ALLOC_STD,
+	};
+	proc_init(&proc, 0, 1, ALLOC_STD);
+	t_surface_wgl_symbols(&proc);
+
+	EXPECT_EQ(surface_gfx_supported(&config), 1);
+	EXPECT_EQ(surface_gfx_init(&surface, &gfx, &config), 0);
+	EXPECT_NULL(gfx.drv);
+	EXPECT_EQ(t_surface_wgl_gfx_init_calls, 0);
+
+	EXPECT_EQ(surface_gfx_bind(&surface, &gfx, &window, &config), 0);
+	EXPECT_PTR(gfx.drv, &t_surface_wgl_gfx_driver);
+	EXPECT_EQ(t_surface_wgl_gfx_init_calls, 1);
+	EXPECT_NOT_NULL(t_surface_wgl_gfx_init_surface);
+	EXPECT_EQ(t_wgl_create_context_calls, 1);
+
+	gfx_free(&gfx);
+	surface_free(&surface);
+	proc_free(&proc);
 	END;
 }
 
@@ -1111,6 +1183,8 @@ STEST(surface_wgl)
 	SSTART;
 
 	RUN(surface_wgl_driver_is_registered);
+	RUN(surface_wgl_gfx_init_order_is_after_bind);
+	RUN(surface_wgl_gfx_bind_initializes_gfx_with_bound_surface);
 	RUN(surface_wgl_init_rejects_non_opengl);
 	RUN(surface_wgl_init_null_surface);
 	RUN(surface_wgl_init_alloc_failure);

@@ -302,14 +302,15 @@ static int surface_glx_native(surface_t *srf, surface_native_t *native)
 }
 
 static surface_driver_t surface_glx = {
-	.name	       = "glx",
-	.compatible    = surface_glx_compatible,
-	.init	       = surface_glx_init,
-	.free	       = surface_glx_free,
-	.config_window = surface_glx_config_window,
-	.bind	       = surface_glx_bind,
-	.unbind	       = surface_glx_unbind,
-	.native	       = surface_glx_native,
+	.name		= "glx",
+	.gfx_init_order = SURFACE_GFX_INIT_AFTER_BIND,
+	.compatible	= surface_glx_compatible,
+	.init		= surface_glx_init,
+	.free		= surface_glx_free,
+	.config_window	= surface_glx_config_window,
+	.bind		= surface_glx_bind,
+	.unbind		= surface_glx_unbind,
+	.native		= surface_glx_native,
 };
 
 SURFACE_DRIVER(surface_glx, &surface_glx);
