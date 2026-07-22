@@ -224,7 +224,7 @@ static int t_surface_wgl_gfx_init(gfx_t *gfx, const gfx_config_t *config)
 {
 	t_surface_wgl_gfx_init_calls++;
 	t_surface_wgl_gfx_init_surface = config != NULL ? config->surface : NULL;
-	gfx->data		      = (void *)0x2468;
+	gfx->data		       = (void *)0x2468;
 	return 0;
 }
 
@@ -281,17 +281,17 @@ static void t_surface_wgl_reset(void)
 		.dwFlags    = T_PFD_DRAW_TO_WINDOW | T_PFD_SUPPORT_OPENGL | T_PFD_DOUBLEBUFFER,
 		.iPixelType = T_PFD_TYPE_RGBA,
 	};
-	t_display_native_ret	 = 0;
-	t_display_native_type	 = DISPLAY_NATIVE_WINDOWS;
-	t_display_native_display = (void *)0x1111;
-	t_window_native_ret	 = 0;
-	t_window_native_type	 = DISPLAY_NATIVE_WINDOWS;
-	t_window_native_window	 = (void *)0x1234;
-	t_surface_wgl_gfx_init_calls = 0;
-	t_surface_wgl_gfx_free_calls = 0;
+	t_display_native_ret	       = 0;
+	t_display_native_type	       = DISPLAY_NATIVE_WINDOWS;
+	t_display_native_display       = (void *)0x1111;
+	t_window_native_ret	       = 0;
+	t_window_native_type	       = DISPLAY_NATIVE_WINDOWS;
+	t_window_native_window	       = (void *)0x1234;
+	t_surface_wgl_gfx_init_calls   = 0;
+	t_surface_wgl_gfx_free_calls   = 0;
 	t_surface_wgl_gfx_init_surface = NULL;
-	t_surface_wgl_gfx_driver.init = NULL;
-	t_surface_wgl_gfx_driver.free = NULL;
+	t_surface_wgl_gfx_driver.init  = NULL;
+	t_surface_wgl_gfx_driver.free  = NULL;
 }
 
 static void t_surface_wgl_symbols(proc_t *proc)
@@ -375,11 +375,12 @@ TEST(surface_wgl_gfx_bind_initializes_gfx_with_bound_surface)
 	t_surface_wgl_reset();
 	t_surface_wgl_gfx_driver.init = t_surface_wgl_gfx_init;
 	t_surface_wgl_gfx_driver.free = t_surface_wgl_gfx_free;
-	proc_t proc		    = {0};
-	display_t display	    = {.drv = &t_surface_wgl_display_driver, .proc = &proc};
-	gfx_t gfx		    = {0};
-	surface_t surface	    = {0};
-	window_t window		    = {.display = &display};
+	proc_t proc		      = {0};
+	display_t display	      = {.drv = &t_surface_wgl_display_driver, .proc = &proc};
+	gfx_t gfx		      = {0};
+	surface_t surface	      = {0};
+	window_t window		      = {.display = &display};
+
 	surface_gfx_config_t config = {
 		.display = &display,
 		.proc	 = &proc,
