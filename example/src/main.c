@@ -1,5 +1,6 @@
 #include "display_driver.h"
 #include "gfx_driver.h"
+#include "gfx_shader.h"
 #include "log.h"
 #include "monitor.h"
 #include "surface.h"
@@ -12,6 +13,7 @@ enum {
 typedef struct example_target_s {
 	gfx_driver_t *driver;
 	gfx_t gfx;
+	gfx_shader_t shader;
 	surface_t surface;
 	window_t window;
 	u32 id;
@@ -27,6 +29,7 @@ typedef struct example_state_s {
 	u32 open;
 	proc_t *proc;
 	display_t *display;
+	gfx_shader_compiler_t *shader_compiler;
 	int failed;
 } example_state_t;
 
@@ -69,7 +72,7 @@ static int draw(example_target_t *target)
 		log_error("csurface_example", "draw", NULL, "failed to clear color buffer");
 		return 1;
 	}
-	if (target->driver->draw_triangle_2d != NULL && gfx_draw_triangle_2d(gfx, vertices)) {
+	if (target->driver->draw_triangle_2d != NULL && gfx_draw_triangle_2d(&target->shader, vertices)) {
 		log_error("csurface_example", "draw", NULL, "failed to draw triangle");
 		return 1;
 	}
@@ -168,6 +171,7 @@ static void clear_target_graphics(example_target_t *target)
 	}
 
 	gfx_target_t gfx_target = {.type = GFX_TARGET_NONE};
+	gfx_shader_free(&target->shader);
 	gfx_set_target(&target->gfx, &gfx_target);
 	surface_free(&target->surface);
 	gfx_free(&target->gfx);
@@ -266,6 +270,48 @@ static int bind_target_graphics(display_t *display, proc_t *proc, example_target
 	return surface_gfx_bind(&target->surface, &target->gfx, window, &config);
 }
 
+static int init_target_shader(example_target_t *target, gfx_shader_compiler_t *compiler)
+{
+	if (target == NULL || target->driver == NULL) {
+		return 1;
+	}
+	if (target->shader.data != NULL) {
+		return 0;
+	}
+	const char *triangle_src = "vs_in 0 VertexIn {\n"
+				   "\tvec2f position : POSITION;\n"
+				   "\tvec4f color : COLOR0;\n"
+				   "}\n"
+				   "vs_out VertexOut {\n"
+				   "\tvec4f position : POSITION;\n"
+				   "\tvec4f color : COLOR0;\n"
+				   "}\n"
+				   "fs_in FragmentIn {\n"
+				   "\tvec4f color : COLOR0;\n"
+				   "}\n"
+				   "fs_out FragmentOut {\n"
+				   "\tvec4f color : COLOR0;\n"
+				   "}\n"
+				   "VertexOut vertex(VertexIn input) {\n"
+				   "\tVertexOut output;\n"
+				   "\toutput.position = vec4f(input.position.x, input.position.y, 0.0f, 1.0f);\n"
+				   "\toutput.color = input.color;\n"
+				   "\treturn output;\n"
+				   "}\n"
+				   "FragmentOut fragment(FragmentIn input) {\n"
+				   "\tFragmentOut output;\n"
+				   "\toutput.color = input.color;\n"
+				   "\treturn output;\n"
+				   "}\n";
+	if (gfx_shader_init(&target->shader,
+			    &target->gfx,
+			    &(gfx_shader_config_t){.compiler = compiler, .source = strv_cstr(triangle_src)}) == NULL) {
+		log_error("csurface_example", "init", NULL, "failed to initialize triangle shader for driver: %s", target->driver->name);
+		return 1;
+	}
+	return 0;
+}
+
 static int restore_target_graphics(example_state_t *state, example_target_t *target)
 {
 	if (state == NULL || target == NULL) {
@@ -304,7 +350,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 		return -1;
 	}
 	if (bind_target_graphics(state->display, state->proc, &next, &target->window) ||
-	    set_target_size(&next, target->width, target->height)) {
+	    set_target_size(&next, target->width, target->height) || init_target_shader(&next, state->shader_compiler)) {
 		clear_target_graphics(&next);
 		if (restore_target_graphics(state, target)) {
 			return -1;
@@ -313,13 +359,18 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	}
 
 	gfx_t old_gfx		   = target->gfx;
+	gfx_shader_t old_shader	   = target->shader;
+	old_shader.gfx		   = &old_gfx;
 	surface_t old_surface	   = target->surface;
 	old_surface.config.gfx	   = &old_gfx;
 	next.surface.config.gfx	   = &next.gfx;
 	target->gfx		   = next.gfx;
+	target->shader		   = next.shader;
+	target->shader.gfx	   = &target->gfx;
 	target->surface		   = next.surface;
 	target->surface.config.gfx = &target->gfx;
 	target->driver		   = driver;
+	gfx_shader_free(&old_shader);
 	surface_free(&old_surface);
 	gfx_free(&old_gfx);
 
@@ -446,7 +497,7 @@ static void on_event(display_t *display, const display_event_t *event, void *use
 }
 
 static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, const display_monitor_t *monitor, u32 index,
-		       example_target_t *target)
+		       gfx_shader_compiler_t *compiler, example_target_t *target)
 {
 	u16 x = 0;
 	u16 y = 0;
@@ -494,6 +545,9 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, c
 		log_error("csurface_example", "init", NULL, "failed to set surface target for graphics driver: %s", driver->name);
 		return fail_target_init(target);
 	}
+	if (init_target_shader(target, compiler)) {
+		return fail_target_init(target);
+	}
 	target->id	    = window_id(&target->window);
 	target->open	    = 1;
 	target->initialized = 1;
@@ -501,7 +555,8 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, c
 	return 1;
 }
 
-static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t *proc, sock_t *sock)
+static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t *proc, sock_t *sock,
+			      gfx_shader_compiler_t *shader_compiler)
 {
 	display_t display			      = {0};
 	gfx_driver_t *drivers[EXAMPLE_MAX_TARGETS]    = {0};
@@ -524,6 +579,10 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 		display_free(&display);
 		return 1;
 	}
+	if (shader_compiler == NULL) {
+		display_free(&display);
+		return 1;
+	}
 
 	u32 driver_count = gfx_driver_list(drivers, sizeof(drivers) / sizeof(drivers[0]));
 	if (driver_count > sizeof(drivers) / sizeof(drivers[0])) {
@@ -533,8 +592,13 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 		if (drivers[i] == NULL) {
 			continue;
 		}
-		int opened =
-			open_target(&display, proc, drivers[i], has_monitor ? &show_monitor : NULL, target_count, &targets[target_count]);
+		int opened = open_target(&display,
+					 proc,
+					 drivers[i],
+					 has_monitor ? &show_monitor : NULL,
+					 target_count,
+					 shader_compiler,
+					 &targets[target_count]);
 		if (opened < 0) {
 			if (targets[target_count].gfx.drv != NULL) {
 				target_count++;
@@ -556,11 +620,12 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 	}
 
 	example_state_t state = {
-		.targets = targets,
-		.count	 = target_count,
-		.open	 = target_count,
-		.proc	 = proc,
-		.display = &display,
+		.targets	 = targets,
+		.count		 = target_count,
+		.open		 = target_count,
+		.proc		 = proc,
+		.display	 = &display,
+		.shader_compiler = shader_compiler,
 	};
 	if (ret == 0) {
 		display_set_event_callback(&display, on_event, &state);
@@ -606,11 +671,12 @@ int main(void)
 
 	log_t log = {0};
 	log_set(&log);
-	log_add_callback(log_std_cb, DST_STD(), LOG_ERROR, 1, 1);
+	log_add_callback(log_std_cb, DST_STD(), LOG_INFO, 1, 1);
 
 	fs_t fs						= {0};
 	proc_t proc					= {0};
 	sock_t sock					= {0};
+	gfx_shader_compiler_t shader_compiler		= {0};
 	display_driver_t *drivers[EXAMPLE_MAX_DISPLAYS] = {0};
 	int ret						= 0;
 
@@ -626,6 +692,12 @@ int main(void)
 		log_error("csurface_example", "init", NULL, "no display drivers found");
 		ret = 1;
 	} else {
+		if (gfx_shader_compiler_init(&shader_compiler, ALLOC_STD) == NULL) {
+			log_error("csurface_example", "init", NULL, "failed to initialize shader compiler");
+			ret = 1;
+		}
+	}
+	if (ret == 0) {
 		u32 tried = 0;
 		for (u32 i = 0; i < driver_count; i++) {
 			if (drivers[i] == NULL || drivers[i]->native == NULL) {
@@ -635,7 +707,7 @@ int main(void)
 				continue;
 			}
 			tried++;
-			if (run_display_driver(drivers[i], &fs, &proc, &sock)) {
+			if (run_display_driver(drivers[i], &fs, &proc, &sock, &shader_compiler)) {
 				ret = 1;
 				break;
 			}
@@ -646,6 +718,7 @@ int main(void)
 		}
 	}
 
+	gfx_shader_compiler_free(&shader_compiler);
 	sock_free(&sock);
 	proc_free(&proc);
 	fs_free(&fs);
