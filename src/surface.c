@@ -15,8 +15,7 @@ static int surface_plan_config_valid(const surface_plan_config_t *config)
 
 static int surface_gfx_config_valid(const surface_gfx_config_t *config)
 {
-	return config != NULL && config->display != NULL && config->proc != NULL && config->driver != NULL &&
-	       config->driver->api != GFX_API_NONE;
+	return config != NULL && config->display != NULL && config->driver != NULL && config->driver->api != GFX_API_NONE;
 }
 
 static void surface_info_display(display_t *display, gfx_api_t gfx_api, surface_info_t *info)
@@ -108,25 +107,23 @@ int surface_gfx_supported(const surface_gfx_config_t *config)
 	return drv->plan(&info, &plan) == 0;
 }
 
-surface_t *surface_init_driver(surface_t *srf, const surface_driver_t *drv, const surface_config_t *config)
+static surface_t *surface_init_driver(surface_t *srf, const surface_driver_t *drv, const surface_config_t *config, alloc_t alloc)
 {
 	if (srf == NULL || drv == NULL || drv->init == NULL || !surface_config_valid(config)) {
 		return NULL;
 	}
 
 	srf->drv    = drv;
+	srf->alloc  = alloc;
 	srf->config = *config;
 	if (srf->drv->init(srf, config)) {
-		srf->drv    = NULL;
-		srf->config = (surface_config_t){0};
-		srf->data   = NULL;
 		return NULL;
 	}
 
 	return srf;
 }
 
-surface_t *surface_init(surface_t *srf, const surface_config_t *config)
+surface_t *surface_init(surface_t *srf, const surface_config_t *config, alloc_t alloc)
 {
 	if (srf == NULL || !surface_config_valid(config)) {
 		return NULL;
@@ -141,14 +138,14 @@ surface_t *surface_init(surface_t *srf, const surface_config_t *config)
 	if (drv == NULL) {
 		return NULL;
 	}
-	if (surface_init_driver(srf, drv, config) != NULL) {
+	if (surface_init_driver(srf, drv, config, alloc) != NULL) {
 		return srf;
 	}
 
 	return NULL;
 }
 
-int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *config)
+int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *config, proc_t *proc, alloc_t alloc)
 {
 	if (srf == NULL || gfx == NULL || !surface_gfx_config_valid(config)) {
 		return 1;
@@ -173,17 +170,17 @@ int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *con
 					   &(surface_config_t){
 						   .display = config->display,
 						   .gfx_api = config->driver->api,
-						   .alloc   = config->alloc,
-					   }) == NULL;
+					   },
+					   alloc) == NULL;
 	}
 
 	if (gfx_init(gfx,
 		     config->driver,
 		     &(gfx_config_t){
-			     .proc  = config->proc,
-			     .alloc = config->alloc,
-			     .plan  = &plan.gfx,
-		     }) == NULL) {
+			     .plan = &plan.gfx,
+		     },
+		     proc,
+		     alloc) == NULL) {
 		return 1;
 	}
 	if (surface_init_driver(srf,
@@ -191,8 +188,8 @@ int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *con
 				&(surface_config_t){
 					.display = config->display,
 					.gfx	 = gfx,
-					.alloc	 = config->alloc,
-				}) == NULL) {
+				},
+				alloc) == NULL) {
 		gfx_free(gfx);
 		return 1;
 	}
@@ -200,7 +197,7 @@ int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *con
 	return 0;
 }
 
-int surface_gfx_bind(surface_t *srf, gfx_t *gfx, window_t *window, const surface_gfx_config_t *config)
+int surface_gfx_bind(surface_t *srf, gfx_t *gfx, window_t *window, const surface_gfx_config_t *config, proc_t *proc, alloc_t alloc)
 {
 	if (srf == NULL || srf->drv == NULL || gfx == NULL || !surface_gfx_config_valid(config)) {
 		return 1;
@@ -226,11 +223,11 @@ int surface_gfx_bind(surface_t *srf, gfx_t *gfx, window_t *window, const surface
 	if (gfx_init(gfx,
 		     config->driver,
 		     &(gfx_config_t){
-			     .proc    = config->proc,
-			     .alloc   = config->alloc,
 			     .plan    = &plan.gfx,
 			     .surface = native.gfx_surface,
-		     }) == NULL) {
+		     },
+		     proc,
+		     alloc) == NULL) {
 		surface_unbind(srf);
 		return 1;
 	}

@@ -117,12 +117,11 @@ static int surface_d3d11_compatible(const surface_info_t *info)
 
 static int surface_d3d11_init(surface_t *srf, const surface_config_t *config)
 {
-	if (srf == NULL || config == NULL || config->alloc.alloc == NULL) {
+	if (srf == NULL || config == NULL) {
 		return 1;
 	}
 
-	alloc_t alloc	     = config->alloc;
-	surface_d3d11_t *ctx = alloc_alloc(&alloc, sizeof(*ctx));
+	surface_d3d11_t *ctx = alloc_alloc(&srf->alloc, sizeof(*ctx));
 	if (ctx == NULL) {
 		log_error("csurface", "surface_d3d11", NULL, "failed to allocate surface data");
 		return 1;
@@ -163,7 +162,7 @@ static int surface_d3d11_free(surface_t *srf)
 
 	surface_d3d11_t *ctx = srf->data;
 	surface_d3d11_unbind(srf);
-	alloc_free(&srf->config.alloc, ctx, sizeof(*ctx));
+	alloc_free(&srf->alloc, ctx, sizeof(*ctx));
 	srf->data = NULL;
 	return 0;
 }

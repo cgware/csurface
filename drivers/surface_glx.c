@@ -87,11 +87,11 @@ static int surface_glx_compatible(const surface_info_t *info)
 
 static int surface_glx_init(surface_t *srf, const surface_config_t *config)
 {
-	if (srf == NULL || config == NULL || config->alloc.alloc == NULL) {
+	if (srf == NULL || config == NULL) {
 		return 1;
 	}
 
-	alloc_t alloc	   = config->alloc;
+	alloc_t alloc	   = srf->alloc;
 	surface_glx_t *ctx = alloc_alloc(&alloc, sizeof(*ctx));
 	if (ctx == NULL) {
 		log_error("csurface", "glx", NULL, "failed to allocate surface data");
@@ -143,7 +143,7 @@ static int surface_glx_free(surface_t *srf)
 	 * with callbacks into unmapped code.
 	 */
 
-	alloc_free(&srf->config.alloc, ctx, sizeof(*ctx));
+	alloc_free(&srf->alloc, ctx, sizeof(*ctx));
 	srf->data = NULL;
 	return 0;
 }

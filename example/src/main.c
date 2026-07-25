@@ -182,13 +182,11 @@ static void clear_target_graphics(example_target_t *target)
 	target->driver = NULL;
 }
 
-static surface_gfx_config_t target_graphics_config(display_t *display, proc_t *proc, gfx_driver_t *driver)
+static surface_gfx_config_t target_graphics_config(display_t *display, gfx_driver_t *driver)
 {
 	return (surface_gfx_config_t){
 		.display = display,
-		.proc	 = proc,
 		.driver	 = driver,
-		.alloc	 = ALLOC_STD,
 	};
 }
 
@@ -198,13 +196,13 @@ static int init_target_graphics(display_t *display, proc_t *proc, gfx_driver_t *
 		return -1;
 	}
 
-	surface_gfx_config_t config = target_graphics_config(display, proc, driver);
+	surface_gfx_config_t config = target_graphics_config(display, driver);
 	if (!surface_gfx_supported(&config)) {
 		return 0;
 	}
 
 	target->driver = driver;
-	if (surface_gfx_init(&target->surface, &target->gfx, &config)) {
+	if (surface_gfx_init(&target->surface, &target->gfx, &config, proc, ALLOC_STD)) {
 		log_error("csurface_example", "init", NULL, "failed to initialize surface graphics for driver: %s", driver->name);
 		clear_target_graphics(target);
 		return -1;
@@ -270,8 +268,8 @@ static int bind_target_graphics(display_t *display, proc_t *proc, example_target
 		return 1;
 	}
 
-	surface_gfx_config_t config = target_graphics_config(display, proc, target->driver);
-	return surface_gfx_bind(&target->surface, &target->gfx, window, &config);
+	surface_gfx_config_t config = target_graphics_config(display, target->driver);
+	return surface_gfx_bind(&target->surface, &target->gfx, window, &config, proc, ALLOC_STD);
 }
 
 static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t *compiler)

@@ -123,7 +123,7 @@ static int surface_vk_wsi_plan(const surface_info_t *info, surface_plan_t *plan)
 
 static int surface_vk_wsi_init(surface_t *srf, const surface_config_t *config)
 {
-	if (srf == NULL || config == NULL || config->gfx == NULL || config->alloc.alloc == NULL) {
+	if (srf == NULL || config == NULL || config->gfx == NULL) {
 		return 1;
 	}
 
@@ -133,8 +133,7 @@ static int surface_vk_wsi_init(surface_t *srf, const surface_config_t *config)
 		return 1;
 	}
 
-	alloc_t alloc	      = config->alloc;
-	surface_vk_wsi_t *ctx = alloc_alloc(&alloc, sizeof(*ctx));
+	surface_vk_wsi_t *ctx = alloc_alloc(&srf->alloc, sizeof(*ctx));
 	if (ctx == NULL) {
 		log_error("csurface", "csurface_vk_wsi", NULL, "failed to allocate surface data");
 		return 1;
@@ -143,7 +142,7 @@ static int surface_vk_wsi_init(surface_t *srf, const surface_config_t *config)
 	ctx->instance = native_gfx.instance;
 
 	if (LOAD_VK(config->gfx, ctx, DestroySurfaceKHR)) {
-		alloc_free(&alloc, ctx, sizeof(*ctx));
+		alloc_free(&srf->alloc, ctx, sizeof(*ctx));
 		return 1;
 	}
 
@@ -175,7 +174,7 @@ static int surface_vk_wsi_free(surface_t *srf)
 
 	surface_vk_wsi_t *ctx = srf->data;
 	surface_vk_wsi_unbind(srf);
-	alloc_free(&srf->config.alloc, ctx, sizeof(*ctx));
+	alloc_free(&srf->alloc, ctx, sizeof(*ctx));
 	srf->data = NULL;
 	return 0;
 }

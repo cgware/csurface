@@ -28,7 +28,6 @@ static gfx_t t_surface_none_gfx = {
 static surface_config_t t_surface_none_config = {
 	.display = &t_surface_none_display,
 	.gfx	 = &t_surface_none_gfx,
-	.alloc	 = {.alloc = alloc_alloc_std, .realloc = alloc_realloc_std, .free = alloc_free_std},
 };
 
 TEST(surface_none_driver_is_registered)
@@ -58,7 +57,10 @@ TEST(surface_none_init_success)
 
 	surface_t surface = {0};
 
-	EXPECT_PTR(surface_init(&surface, &t_surface_none_config), &surface);
+	EXPECT_PTR(surface_init(&surface,
+				&t_surface_none_config,
+				(alloc_t){.alloc = alloc_alloc_std, .realloc = alloc_realloc_std, .free = alloc_free_std}),
+		   &surface);
 	EXPECT_PTR(surface.drv, t_surface_none_driver());
 
 	surface_free(&surface);

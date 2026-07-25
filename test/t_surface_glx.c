@@ -249,10 +249,9 @@ static int t_surface_glx_open(proc_t *proc, gfx_t *gfx, display_t *display, surf
 	surface_config_t config = {
 		.display = display,
 		.gfx	 = gfx,
-		.alloc	 = ALLOC_STD,
 	};
 
-	return surface_init(surface, &config) == NULL;
+	return surface_init(surface, &config, ALLOC_STD) == NULL;
 }
 
 static int t_surface_glx_open_driver(proc_t *proc, gfx_t *gfx, display_t *display, surface_t *surface)
@@ -271,10 +270,9 @@ static int t_surface_glx_open_driver(proc_t *proc, gfx_t *gfx, display_t *displa
 	surface_config_t config = {
 		.display = display,
 		.gfx	 = gfx,
-		.alloc	 = ALLOC_STD,
 	};
 
-	return surface_init_driver(surface, t_surface_glx_driver(), &config) == NULL;
+	return surface_init(surface, &config, ALLOC_STD) == NULL;
 }
 
 static void t_surface_glx_close(proc_t *proc, surface_t *surface)
@@ -316,10 +314,9 @@ TEST(surface_glx_init_rejects_non_opengl)
 	surface_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
-		.alloc	 = ALLOC_STD,
 	};
 
-	EXPECT_NULL(surface_init(&surface, &config));
+	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
 
 	proc_free(&proc);
 	END;
@@ -332,9 +329,7 @@ TEST(surface_glx_init_null_surface)
 	surface_driver_t *drv = t_surface_glx_driver();
 	EXPECT_NOT_NULL(drv);
 
-	surface_config_t config = {
-		.alloc = ALLOC_STD,
-	};
+	surface_config_t config = {0};
 
 	EXPECT_EQ(drv->init(NULL, &config), 1);
 
@@ -362,11 +357,10 @@ TEST(surface_glx_init_alloc_failure)
 	surface_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
-		.alloc	 = {.alloc = t_surface_glx_alloc_fail},
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init_driver(&surface, t_surface_glx_driver(), &config));
+	EXPECT_NULL(surface_init(&surface, &config, (alloc_t){.alloc = t_surface_glx_alloc_fail}));
 	log_set_quiet(0, 0);
 
 	proc_free(&proc);
@@ -393,11 +387,10 @@ TEST(surface_glx_init_missing_symbol)
 	surface_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
-		.alloc	 = ALLOC_STD,
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init_driver(&surface, t_surface_glx_driver(), &config));
+	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	proc_free(&proc);
@@ -425,11 +418,10 @@ TEST(surface_glx_init_missing_second_symbol)
 	surface_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
-		.alloc	 = ALLOC_STD,
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init_driver(&surface, t_surface_glx_driver(), &config));
+	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	proc_free(&proc);

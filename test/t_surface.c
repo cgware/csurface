@@ -156,7 +156,6 @@ static gfx_t t_surface_gfx = {
 static surface_config_t t_surface_config = {
 	.display = &t_surface_display,
 	.gfx	 = &t_surface_gfx,
-	.alloc	 = {.alloc = alloc_alloc_std, .realloc = alloc_realloc_std, .free = alloc_free_std},
 };
 
 static void t_surface_reset(void)
@@ -189,13 +188,11 @@ static void t_surface_reset(void)
 	t_surface_gfx_init_config	 = (gfx_config_t){0};
 }
 
-static surface_gfx_config_t t_surface_gfx_config(proc_t *proc)
+static surface_gfx_config_t t_surface_gfx_config(void)
 {
 	return (surface_gfx_config_t){
 		.display = &t_surface_display,
-		.proc	 = proc,
 		.driver	 = &t_surface_gfx_driver,
-		.alloc	 = {.alloc = alloc_alloc_std, .realloc = alloc_realloc_std, .free = alloc_free_std},
 	};
 }
 
@@ -203,7 +200,7 @@ TEST(surface_init_null_surface)
 {
 	START;
 
-	EXPECT_NULL(surface_init(NULL, &t_surface_config));
+	EXPECT_NULL(surface_init(NULL, &t_surface_config, ALLOC_STD));
 
 	END;
 }
@@ -214,7 +211,7 @@ TEST(surface_init_null_driver)
 
 	surface_t srf = {0};
 
-	EXPECT_NULL(surface_init_driver(&srf, NULL, &t_surface_config));
+	EXPECT_NULL(surface_init(&srf, NULL, ALLOC_STD));
 
 	END;
 }
@@ -225,7 +222,7 @@ TEST(surface_init_null_config)
 
 	surface_t srf = {0};
 
-	EXPECT_NULL(surface_init(&srf, NULL));
+	EXPECT_NULL(surface_init(&srf, NULL, ALLOC_STD));
 
 	END;
 }
@@ -299,7 +296,7 @@ TEST(surface_init_calls_driver)
 	t_surface_reset();
 	surface_t srf = {0};
 
-	EXPECT_PTR(surface_init_driver(&srf, &t_surface_driver, &t_surface_config), &srf);
+	EXPECT_PTR(surface_init(&srf, &t_surface_config, ALLOC_STD), &srf);
 	EXPECT_EQ(t_surface_init_calls, 1);
 
 	END;
@@ -313,7 +310,7 @@ TEST(surface_init_driver_failure_clears_fields)
 	t_surface_init_ret = 1;
 	surface_t srf	   = {0};
 
-	EXPECT_NULL(surface_init_driver(&srf, &t_surface_driver, &t_surface_config));
+	EXPECT_NULL(surface_init(&srf, &t_surface_config, ALLOC_STD));
 	EXPECT_NULL(srf.drv);
 	EXPECT_NULL(srf.data);
 
@@ -329,7 +326,7 @@ TEST(surface_init_gfx_api_failure)
 	surface_config_t config = t_surface_config;
 	config.gfx		= &gfx;
 
-	EXPECT_NULL(surface_init(&srf, &config));
+	EXPECT_NULL(surface_init(&srf, &config, ALLOC_STD));
 
 	END;
 }
@@ -436,7 +433,7 @@ TEST(surface_init_no_compatible_driver)
 	drv.api			= -1;
 	t_surface_gfx.drv	= &drv;
 
-	EXPECT_NULL(surface_init(&srf, &config));
+	EXPECT_NULL(surface_init(&srf, &config, ALLOC_STD));
 
 	t_surface_gfx.drv = &t_surface_gfx_driver;
 	END;
@@ -452,7 +449,7 @@ TEST(surface_init_uses_gfx_api_without_gfx)
 	config.gfx		= NULL;
 	config.gfx_api		= GFX_API_OPENGL;
 
-	EXPECT_PTR(surface_init(&srf, &config), &srf);
+	EXPECT_PTR(surface_init(&srf, &config, ALLOC_STD), &srf);
 	EXPECT_EQ(t_surface_init_calls, 1);
 
 	surface_free(&srf);
@@ -561,10 +558,9 @@ TEST(surface_gfx_supported_returns_zero_without_driver)
 	START;
 
 	t_surface_reset();
-	proc_t proc		    = {0};
 	gfx_driver_t gfx_driver	    = t_surface_gfx_driver;
 	gfx_driver.api		    = 99;
-	surface_gfx_config_t config = t_surface_gfx_config(&proc);
+	surface_gfx_config_t config = t_surface_gfx_config();
 	config.driver		    = &gfx_driver;
 
 	EXPECT_EQ(surface_gfx_supported(&config), 0);
@@ -578,8 +574,7 @@ TEST(surface_gfx_supported_accepts_missing_plan)
 
 	t_surface_reset();
 	t_surface_driver.plan	    = NULL;
-	proc_t proc		    = {0};
-	surface_gfx_config_t config = t_surface_gfx_config(&proc);
+	surface_gfx_config_t config = t_surface_gfx_config();
 
 	EXPECT_EQ(surface_gfx_supported(&config), 1);
 
@@ -591,8 +586,7 @@ TEST(surface_gfx_supported_returns_plan_result)
 	START;
 
 	t_surface_reset();
-	proc_t proc		    = {0};
-	surface_gfx_config_t config = t_surface_gfx_config(&proc);
+	surface_gfx_config_t config = t_surface_gfx_config();
 
 	t_surface_plan_ret = 1;
 	EXPECT_EQ(surface_gfx_supported(&config), 0);
@@ -606,9 +600,10 @@ TEST(surface_gfx_init_rejects_invalid_config)
 {
 	START;
 
-	gfx_t gfx = {0};
+	proc_t proc = {0};
+	gfx_t gfx   = {0};
 
-	EXPECT_EQ(surface_gfx_init(NULL, &gfx, &(surface_gfx_config_t){0}), 1);
+	EXPECT_EQ(surface_gfx_init(NULL, &gfx, &(surface_gfx_config_t){0}, &proc, ALLOC_STD), 1);
 
 	END;
 }
@@ -621,12 +616,12 @@ TEST(surface_gfx_init_returns_error_without_driver)
 	proc_t proc		    = {0};
 	gfx_driver_t gfx_driver	    = t_surface_gfx_driver;
 	gfx_driver.api		    = 99;
-	surface_gfx_config_t config = t_surface_gfx_config(&proc);
+	surface_gfx_config_t config = t_surface_gfx_config();
 	config.driver		    = &gfx_driver;
 	surface_t srf		    = {0};
 	gfx_t gfx		    = {0};
 
-	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config), 1);
+	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config, &proc, ALLOC_STD), 1);
 
 	END;
 }
@@ -638,11 +633,11 @@ TEST(surface_gfx_init_returns_plan_failure)
 	t_surface_reset();
 	t_surface_plan_ret	    = 1;
 	proc_t proc		    = {0};
-	surface_gfx_config_t config = t_surface_gfx_config(&proc);
+	surface_gfx_config_t config = t_surface_gfx_config();
 	surface_t srf		    = {0};
 	gfx_t gfx		    = {0};
 
-	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config), 1);
+	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config, &proc, ALLOC_STD), 1);
 
 	END;
 }
@@ -654,11 +649,11 @@ TEST(surface_gfx_init_after_bind_initializes_surface_only)
 	t_surface_reset();
 	t_surface_driver.gfx_init_order = SURFACE_GFX_INIT_AFTER_BIND;
 	proc_t proc			= {0};
-	surface_gfx_config_t config	= t_surface_gfx_config(&proc);
+	surface_gfx_config_t config	= t_surface_gfx_config();
 	surface_t srf			= {0};
 	gfx_t gfx			= {0};
 
-	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config), 0);
+	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config, &proc, ALLOC_STD), 0);
 	EXPECT_EQ(t_surface_init_calls, 1);
 	EXPECT_EQ(t_surface_gfx_init_calls, 0);
 	EXPECT_PTR(srf.config.display, &t_surface_display);
@@ -676,11 +671,11 @@ TEST(surface_gfx_init_returns_gfx_init_failure)
 	t_surface_reset();
 	t_surface_gfx_init_ret	    = 1;
 	proc_t proc		    = {0};
-	surface_gfx_config_t config = t_surface_gfx_config(&proc);
+	surface_gfx_config_t config = t_surface_gfx_config();
 	surface_t srf		    = {0};
 	gfx_t gfx		    = {0};
 
-	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config), 1);
+	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config, &proc, ALLOC_STD), 1);
 	EXPECT_EQ(t_surface_gfx_init_calls, 1);
 	EXPECT_NULL(gfx.drv);
 
@@ -694,11 +689,11 @@ TEST(surface_gfx_init_frees_gfx_on_surface_failure)
 	t_surface_reset();
 	t_surface_init_ret	    = 1;
 	proc_t proc		    = {0};
-	surface_gfx_config_t config = t_surface_gfx_config(&proc);
+	surface_gfx_config_t config = t_surface_gfx_config();
 	surface_t srf		    = {0};
 	gfx_t gfx		    = {0};
 
-	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config), 1);
+	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config, &proc, ALLOC_STD), 1);
 	EXPECT_EQ(t_surface_gfx_init_calls, 1);
 	EXPECT_EQ(t_surface_gfx_free_calls, 1);
 	EXPECT_NULL(gfx.drv);
@@ -712,11 +707,11 @@ TEST(surface_gfx_init_initializes_gfx_before_surface)
 
 	t_surface_reset();
 	proc_t proc		    = {0};
-	surface_gfx_config_t config = t_surface_gfx_config(&proc);
+	surface_gfx_config_t config = t_surface_gfx_config();
 	surface_t srf		    = {0};
 	gfx_t gfx		    = {0};
 
-	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config), 0);
+	EXPECT_EQ(surface_gfx_init(&srf, &gfx, &config, &proc, ALLOC_STD), 0);
 	EXPECT_EQ(t_surface_gfx_init_calls, 1);
 	EXPECT_EQ(t_surface_init_calls, 1);
 	EXPECT_PTR(gfx.drv, &t_surface_gfx_driver);
@@ -742,10 +737,11 @@ TEST(surface_gfx_bind_rejects_invalid_arguments)
 {
 	START;
 
+	proc_t proc	= {0};
 	gfx_t gfx	= {0};
 	window_t window = {0};
 
-	EXPECT_EQ(surface_gfx_bind(NULL, &gfx, &window, &(surface_gfx_config_t){0}), 1);
+	EXPECT_EQ(surface_gfx_bind(NULL, &gfx, &window, &(surface_gfx_config_t){0}, &proc, ALLOC_STD), 1);
 
 	END;
 }
@@ -757,12 +753,12 @@ TEST(surface_gfx_bind_returns_bind_failure)
 	t_surface_reset();
 	t_surface_bind_ret	    = 1;
 	proc_t proc		    = {0};
-	surface_gfx_config_t config = t_surface_gfx_config(&proc);
+	surface_gfx_config_t config = t_surface_gfx_config();
 	surface_t srf		    = {.drv = &t_surface_driver};
 	gfx_t gfx		    = {0};
 	window_t window		    = {0};
 
-	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config), 1);
+	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config, &proc, ALLOC_STD), 1);
 	EXPECT_EQ(t_surface_bind_calls, 1);
 
 	END;
@@ -774,12 +770,12 @@ TEST(surface_gfx_bind_returns_success_when_gfx_ready)
 
 	t_surface_reset();
 	proc_t proc		    = {0};
-	surface_gfx_config_t config = t_surface_gfx_config(&proc);
+	surface_gfx_config_t config = t_surface_gfx_config();
 	surface_t srf		    = {.drv = &t_surface_driver};
 	gfx_t gfx		    = {.drv = &t_surface_gfx_driver};
 	window_t window		    = {0};
 
-	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config), 0);
+	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config, &proc, ALLOC_STD), 0);
 	EXPECT_EQ(t_surface_bind_calls, 1);
 	EXPECT_EQ(t_surface_gfx_init_calls, 0);
 
@@ -793,12 +789,12 @@ TEST(surface_gfx_bind_unbinds_without_native_surface)
 	t_surface_reset();
 	t_surface_driver.gfx_init_order = SURFACE_GFX_INIT_AFTER_BIND;
 	proc_t proc			= {0};
-	surface_gfx_config_t config	= t_surface_gfx_config(&proc);
+	surface_gfx_config_t config	= t_surface_gfx_config();
 	surface_t srf			= {.drv = &t_surface_driver};
 	gfx_t gfx			= {0};
 	window_t window			= {0};
 
-	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config), 1);
+	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config, &proc, ALLOC_STD), 1);
 	EXPECT_EQ(t_surface_bind_calls, 1);
 	EXPECT_EQ(t_surface_native_calls, 1);
 	EXPECT_EQ(t_surface_unbind_calls, 1);
@@ -816,12 +812,12 @@ TEST(surface_gfx_bind_unbinds_on_plan_failure)
 	gfx_surface_t gfx_surface	= {0};
 	t_surface_native_gfx_surface	= &gfx_surface;
 	proc_t proc			= {0};
-	surface_gfx_config_t config	= t_surface_gfx_config(&proc);
+	surface_gfx_config_t config	= t_surface_gfx_config();
 	surface_t srf			= {.drv = &t_surface_driver};
 	gfx_t gfx			= {0};
 	window_t window			= {0};
 
-	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config), 1);
+	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config, &proc, ALLOC_STD), 1);
 	EXPECT_EQ(t_surface_unbind_calls, 1);
 	EXPECT_EQ(t_surface_gfx_init_calls, 0);
 
@@ -838,12 +834,12 @@ TEST(surface_gfx_bind_unbinds_on_gfx_init_failure)
 	gfx_surface_t gfx_surface	= {0};
 	t_surface_native_gfx_surface	= &gfx_surface;
 	proc_t proc			= {0};
-	surface_gfx_config_t config	= t_surface_gfx_config(&proc);
+	surface_gfx_config_t config	= t_surface_gfx_config();
 	surface_t srf			= {.drv = &t_surface_driver};
 	gfx_t gfx			= {0};
 	window_t window			= {0};
 
-	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config), 1);
+	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config, &proc, ALLOC_STD), 1);
 	EXPECT_EQ(t_surface_gfx_init_calls, 1);
 	EXPECT_EQ(t_surface_unbind_calls, 1);
 	EXPECT_NULL(gfx.drv);
@@ -860,12 +856,12 @@ TEST(surface_gfx_bind_initializes_gfx_after_bind)
 	gfx_surface_t gfx_surface	= {0};
 	t_surface_native_gfx_surface	= &gfx_surface;
 	proc_t proc			= {0};
-	surface_gfx_config_t config	= t_surface_gfx_config(&proc);
+	surface_gfx_config_t config	= t_surface_gfx_config();
 	surface_t srf			= {.drv = &t_surface_driver};
 	gfx_t gfx			= {0};
 	window_t window			= {0};
 
-	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config), 0);
+	EXPECT_EQ(surface_gfx_bind(&srf, &gfx, &window, &config, &proc, ALLOC_STD), 0);
 	EXPECT_EQ(t_surface_gfx_init_calls, 1);
 	EXPECT_PTR(t_surface_gfx_init_config.surface, &gfx_surface);
 	EXPECT_PTR(srf.config.gfx, &gfx);

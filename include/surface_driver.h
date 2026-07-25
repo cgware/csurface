@@ -22,8 +22,6 @@ typedef struct surface_driver_s {
 	int (*native)(surface_t *srf, surface_native_t *native);
 } surface_driver_t;
 
-surface_t *surface_init_driver(surface_t *srf, const surface_driver_t *drv, const surface_config_t *config);
-
 #define SURFACE_DRIVER_TYPE 0x535246
 
 #define SURFACE_DRIVER(_name, _data) DRIVER(_name, SURFACE_DRIVER_TYPE, _data)

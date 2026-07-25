@@ -144,12 +144,11 @@ static int surface_wgl_compatible(const surface_info_t *info)
 
 static int surface_wgl_init(surface_t *srf, const surface_config_t *config)
 {
-	if (srf == NULL || config == NULL || config->display == NULL || config->display->proc == NULL || config->alloc.alloc == NULL) {
+	if (srf == NULL || config == NULL || config->display == NULL || config->display->proc == NULL) {
 		return 1;
 	}
 
-	alloc_t alloc	   = config->alloc;
-	surface_wgl_t *ctx = alloc_alloc(&alloc, sizeof(*ctx));
+	surface_wgl_t *ctx = alloc_alloc(&srf->alloc, sizeof(*ctx));
 	if (ctx == NULL) {
 		log_error("csurface", "wgl", NULL, "failed to allocate surface data");
 		return 1;
@@ -157,7 +156,7 @@ static int surface_wgl_init(surface_t *srf, const surface_config_t *config)
 	mem_set(ctx, 0, sizeof(*ctx));
 
 	if (surface_wgl_load(ctx, config->display->proc)) {
-		alloc_free(&alloc, ctx, sizeof(*ctx));
+		alloc_free(&srf->alloc, ctx, sizeof(*ctx));
 		return 1;
 	}
 
@@ -196,7 +195,7 @@ static int surface_wgl_free(surface_t *srf)
 	surface_wgl_t *ctx = srf->data;
 	surface_wgl_unbind(srf);
 	surface_wgl_unload(ctx);
-	alloc_free(&srf->config.alloc, ctx, sizeof(*ctx));
+	alloc_free(&srf->alloc, ctx, sizeof(*ctx));
 	srf->data = NULL;
 	return 0;
 }

@@ -263,10 +263,9 @@ static int t_surface_d3d11_init_surface(surface_t *surface)
 	surface_config_t config = {
 		.display = &t_display,
 		.gfx	 = &t_gfx,
-		.alloc	 = ALLOC_STD,
 	};
 
-	return surface_init(surface, &config) != surface;
+	return surface_init(surface, &config, ALLOC_STD) != surface;
 }
 
 TEST(surface_d3d11_plan_accepts_windows)
@@ -318,11 +317,10 @@ TEST(surface_d3d11_init_alloc_failure)
 	surface_config_t config = {
 		.display = &t_display,
 		.gfx	 = &t_gfx,
-		.alloc	 = {.alloc = t_surface_d3d11_alloc_fail},
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface, &config));
+	EXPECT_NULL(surface_init(&surface, &config, (alloc_t){.alloc = t_surface_d3d11_alloc_fail}));
 	log_set_quiet(0, 0);
 
 	t_surface_d3d11_cleanup();
