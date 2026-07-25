@@ -1,6 +1,6 @@
 #include "display_driver.h"
 #include "gfx_driver.h"
-#include "gfx_shader.h"
+#include "gfx_pipeline.h"
 #include "log.h"
 #include "monitor.h"
 #include "surface.h"
@@ -13,7 +13,9 @@ enum {
 typedef struct example_target_s {
 	gfx_driver_t *driver;
 	gfx_t gfx;
-	gfx_shader_t shader;
+	gfx_shader_t vs;
+	gfx_shader_t fs;
+	gfx_pipeline_t pipeline;
 	surface_t surface;
 	window_t window;
 	u32 id;
@@ -72,7 +74,7 @@ static int draw(example_target_t *target)
 		log_error("csurface_example", "draw", NULL, "failed to clear color buffer");
 		return 1;
 	}
-	if (target->driver->draw_triangle_2d != NULL && gfx_draw_triangle_2d(&target->shader, vertices)) {
+	if (target->driver->draw_triangle_2d != NULL && gfx_draw_triangle_2d(&target->pipeline, vertices)) {
 		log_error("csurface_example", "draw", NULL, "failed to draw triangle");
 		return 1;
 	}
@@ -171,7 +173,9 @@ static void clear_target_graphics(example_target_t *target)
 	}
 
 	gfx_target_t gfx_target = {.type = GFX_TARGET_NONE};
-	gfx_shader_free(&target->shader);
+	gfx_shader_free(&target->vs);
+	gfx_shader_free(&target->fs);
+	gfx_pipeline_free(&target->pipeline);
 	gfx_set_target(&target->gfx, &gfx_target);
 	surface_free(&target->surface);
 	gfx_free(&target->gfx);
@@ -270,12 +274,12 @@ static int bind_target_graphics(display_t *display, proc_t *proc, example_target
 	return surface_gfx_bind(&target->surface, &target->gfx, window, &config);
 }
 
-static int init_target_shader(example_target_t *target, gfx_shader_compiler_t *compiler)
+static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t *compiler)
 {
 	if (target == NULL || target->driver == NULL) {
 		return 1;
 	}
-	if (target->shader.data != NULL) {
+	if (target->vs.data != NULL) {
 		return 0;
 	}
 	const char *triangle_src = "vs_in 0 VertexIn {\n"
@@ -303,10 +307,37 @@ static int init_target_shader(example_target_t *target, gfx_shader_compiler_t *c
 				   "\toutput.color = input.color;\n"
 				   "\treturn output;\n"
 				   "}\n";
-	if (gfx_shader_init(&target->shader,
-			    &target->gfx,
-			    &(gfx_shader_config_t){.compiler = compiler, .source = strv_cstr(triangle_src)}) == NULL) {
-		log_error("csurface_example", "init", NULL, "failed to initialize triangle shader for driver: %s", target->driver->name);
+
+	gfx_shader_config_t vs_config = {
+		.compiler = compiler,
+		.source	  = strv_cstr(triangle_src),
+		.stage	  = GFX_SHADER_STAGE_VERTEX,
+	};
+
+	if (gfx_shader_init(&target->vs, &target->gfx, &vs_config) == NULL) {
+		log_error("csurface_example",
+			  "init",
+			  NULL,
+			  "failed to initialize triangle vertex shader for driver: %s",
+			  target->driver->name);
+		return 1;
+	}
+
+	gfx_shader_config_t fs_config = {
+		.compiler = compiler,
+		.source	  = strv_cstr(triangle_src),
+		.stage	  = GFX_SHADER_STAGE_FRAGMENT,
+	};
+	if (gfx_shader_init(&target->fs, &target->gfx, &fs_config) == NULL) {
+		log_error("csurface_example",
+			  "init",
+			  NULL,
+			  "failed to initialize triangle fragment shader for driver: %s",
+			  target->driver->name);
+		return 1;
+	}
+	if (gfx_pipeline_init(&target->pipeline, &target->gfx, &(gfx_pipeline_config_t){.vs = target->vs, .fs = target->fs}) == NULL) {
+		log_error("csurface_example", "init", NULL, "failed to initialize pipeline for driver: %s", target->driver->name);
 		return 1;
 	}
 	return 0;
@@ -350,7 +381,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 		return -1;
 	}
 	if (bind_target_graphics(state->display, state->proc, &next, &target->window) ||
-	    set_target_size(&next, target->width, target->height) || init_target_shader(&next, state->shader_compiler)) {
+	    set_target_size(&next, target->width, target->height) || init_target_pipeline(&next, state->shader_compiler)) {
 		clear_target_graphics(&next);
 		if (restore_target_graphics(state, target)) {
 			return -1;
@@ -358,19 +389,29 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 		return 0;
 	}
 
-	gfx_t old_gfx		   = target->gfx;
-	gfx_shader_t old_shader	   = target->shader;
-	old_shader.gfx		   = &old_gfx;
-	surface_t old_surface	   = target->surface;
-	old_surface.config.gfx	   = &old_gfx;
-	next.surface.config.gfx	   = &next.gfx;
-	target->gfx		   = next.gfx;
-	target->shader		   = next.shader;
-	target->shader.gfx	   = &target->gfx;
-	target->surface		   = next.surface;
-	target->surface.config.gfx = &target->gfx;
-	target->driver		   = driver;
-	gfx_shader_free(&old_shader);
+	gfx_t old_gfx		    = target->gfx;
+	gfx_shader_t old_vs	    = target->vs;
+	gfx_shader_t old_fs	    = target->fs;
+	gfx_pipeline_t old_pipeline = target->pipeline;
+	old_vs.gfx		    = &old_gfx;
+	old_fs.gfx		    = &old_gfx;
+	old_pipeline.gfx	    = &old_gfx;
+	surface_t old_surface	    = target->surface;
+	old_surface.config.gfx	    = &old_gfx;
+	next.surface.config.gfx	    = &next.gfx;
+	target->gfx		    = next.gfx;
+	target->vs		    = next.vs;
+	target->fs		    = next.fs;
+	target->pipeline	    = next.pipeline;
+	target->vs.gfx		    = &target->gfx;
+	target->fs.gfx		    = &target->gfx;
+	target->pipeline.gfx	    = &target->gfx;
+	target->surface		    = next.surface;
+	target->surface.config.gfx  = &target->gfx;
+	target->driver		    = driver;
+	gfx_shader_free(&old_vs);
+	gfx_shader_free(&old_fs);
+	gfx_pipeline_free(&old_pipeline);
 	surface_free(&old_surface);
 	gfx_free(&old_gfx);
 
@@ -545,7 +586,7 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, c
 		log_error("csurface_example", "init", NULL, "failed to set surface target for graphics driver: %s", driver->name);
 		return fail_target_init(target);
 	}
-	if (init_target_shader(target, compiler)) {
+	if (init_target_pipeline(target, compiler)) {
 		return fail_target_init(target);
 	}
 	target->id	    = window_id(&target->window);
