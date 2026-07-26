@@ -183,6 +183,7 @@ static void t_surface_reset(void)
 	t_surface_native_gfx_surface	 = NULL;
 	t_surface_driver.gfx_init_order	 = SURFACE_GFX_INIT_BEFORE_BIND;
 	t_surface_driver.plan		 = t_surface_plan;
+	t_surface_driver.init		 = t_surface_init;
 	t_surface_gfx.drv		 = &t_surface_gfx_driver;
 	t_surface_gfx.data		 = NULL;
 	t_surface_gfx_init_config	 = (gfx_config_t){0};
@@ -196,52 +197,26 @@ static surface_gfx_config_t t_surface_gfx_config(void)
 	};
 }
 
-TEST(surface_init_null_surface)
+TEST(surface_init_rejects_invalid_arguments)
 {
 	START;
+
+	surface_t srf = {0};
 
 	EXPECT_NULL(surface_init(NULL, &t_surface_config, ALLOC_STD));
-
-	END;
-}
-
-TEST(surface_init_null_driver)
-{
-	START;
-
-	surface_t srf = {0};
-
+	EXPECT_NULL(surface_init(&srf, NULL, ALLOC_STD));
 	EXPECT_NULL(surface_init(&srf, NULL, ALLOC_STD));
 
 	END;
 }
 
-TEST(surface_init_null_config)
-{
-	START;
-
-	surface_t srf = {0};
-
-	EXPECT_NULL(surface_init(&srf, NULL, ALLOC_STD));
-
-	END;
-}
-
-TEST(surface_plan_null_plan)
-{
-	START;
-
-	EXPECT_EQ(surface_plan(NULL, &(surface_plan_config_t){.display = &t_surface_display, .gfx_api = GFX_API_OPENGL}), 1);
-
-	END;
-}
-
-TEST(surface_plan_null_display)
+TEST(surface_plan_rejects_invalid_arguments)
 {
 	START;
 
 	surface_plan_t plan = {0};
 
+	EXPECT_EQ(surface_plan(NULL, &(surface_plan_config_t){.display = &t_surface_display, .gfx_api = GFX_API_OPENGL}), 1);
 	EXPECT_EQ(surface_plan(&plan, &(surface_plan_config_t){.gfx_api = GFX_API_OPENGL}), 1);
 
 	END;
@@ -317,6 +292,21 @@ TEST(surface_init_driver_failure_clears_fields)
 	END;
 }
 
+TEST(surface_init_rejects_driver_without_init)
+{
+	START;
+
+	t_surface_reset();
+	t_surface_driver.init = NULL;
+	surface_t srf	      = {0};
+
+	EXPECT_NULL(surface_init(&srf, &t_surface_config, ALLOC_STD));
+	EXPECT_NULL(srf.drv);
+	EXPECT_NULL(srf.data);
+
+	END;
+}
+
 TEST(surface_init_gfx_api_failure)
 {
 	START;
@@ -331,53 +321,27 @@ TEST(surface_init_gfx_api_failure)
 	END;
 }
 
-TEST(surface_free_null_surface)
-{
-	START;
-
-	surface_free(NULL);
-
-	END;
-}
-
-TEST(surface_free_without_driver)
+TEST(surface_free_rejects_invalid_arguments)
 {
 	START;
 
 	surface_t srf = {0};
 
+	surface_free(NULL);
 	surface_free(&srf);
 
 	END;
 }
 
-TEST(surface_config_window_null_surface)
+TEST(surface_config_window_rejects_invalid_arguments)
 {
 	START;
 
+	surface_t srf	       = {.drv = &t_surface_driver};
 	window_config_t config = {0};
 
 	EXPECT_EQ(surface_config_window(NULL, &config), 1);
-
-	END;
-}
-
-TEST(surface_bind_null_surface)
-{
-	START;
-
-	window_t window = {0};
-
-	EXPECT_EQ(surface_bind(NULL, &window), 1);
-
-	END;
-}
-
-TEST(surface_unbind_null_surface)
-{
-	START;
-
-	EXPECT_EQ(surface_unbind(NULL), 1);
+	EXPECT_EQ(surface_config_window(&srf, NULL), 1);
 
 	END;
 }
@@ -396,6 +360,19 @@ TEST(surface_config_window_calls_driver)
 	END;
 }
 
+TEST(surface_bind_rejects_invalid_arguments)
+{
+	START;
+
+	surface_t srf	= {.drv = &t_surface_driver};
+	window_t window = {0};
+
+	EXPECT_EQ(surface_bind(NULL, &window), 1);
+	EXPECT_EQ(surface_bind(&srf, NULL), 1);
+
+	END;
+}
+
 TEST(surface_bind_calls_driver)
 {
 	START;
@@ -406,19 +383,6 @@ TEST(surface_bind_calls_driver)
 
 	EXPECT_EQ(surface_bind(&srf, &window), 0);
 	EXPECT_EQ(t_surface_bind_calls, 1);
-
-	END;
-}
-
-TEST(surface_unbind_calls_driver)
-{
-	START;
-
-	t_surface_reset();
-	surface_t srf = {.drv = &t_surface_driver};
-
-	EXPECT_EQ(surface_unbind(&srf), 0);
-	EXPECT_EQ(t_surface_unbind_calls, 1);
 
 	END;
 }
@@ -456,40 +420,42 @@ TEST(surface_init_uses_gfx_api_without_gfx)
 	END;
 }
 
-TEST(surface_config_window_null_config)
+TEST(surface_unbind_rejects_invalid_arguments)
 {
 	START;
 
-	surface_t srf = {.drv = &t_surface_driver};
-
-	EXPECT_EQ(surface_config_window(&srf, NULL), 1);
+	EXPECT_EQ(surface_unbind(NULL), 1);
 
 	END;
 }
 
-TEST(surface_bind_null_window)
+TEST(surface_unbind_calls_driver)
 {
 	START;
 
+	t_surface_reset();
 	surface_t srf = {.drv = &t_surface_driver};
 
-	EXPECT_EQ(surface_bind(&srf, NULL), 1);
+	EXPECT_EQ(surface_unbind(&srf), 0);
+	EXPECT_EQ(t_surface_unbind_calls, 1);
 
 	END;
 }
 
-TEST(surface_native_null_surface)
+TEST(surface_native_rejects_invalid_arguments)
 {
 	START;
 
+	surface_t srf		= {.drv = &t_surface_driver};
 	surface_native_t native = {0};
 
 	EXPECT_EQ(surface_native(NULL, &native), 1);
+	EXPECT_EQ(surface_native(&srf, NULL), 1);
 
 	END;
 }
 
-TEST(surface_native_calls_driver)
+TEST(surface_native_calls_driver_and_sets_native)
 {
 	START;
 
@@ -500,20 +466,6 @@ TEST(surface_native_calls_driver)
 	surface_native(&srf, &native);
 
 	EXPECT_EQ(t_surface_native_calls, 1);
-
-	END;
-}
-
-TEST(surface_native_sets_native)
-{
-	START;
-
-	t_surface_reset();
-	surface_t srf		= {.drv = &t_surface_driver};
-	surface_native_t native = {0};
-
-	surface_native(&srf, &native);
-
 	EXPECT_EQ(native.handle, 0x1234);
 
 	END;
@@ -529,17 +481,6 @@ TEST(surface_native_returns_driver_result)
 	surface_native_t native = {0};
 
 	EXPECT_EQ(surface_native(&srf, &native), 1);
-
-	END;
-}
-
-TEST(surface_native_null_native)
-{
-	START;
-
-	surface_t srf = {.drv = &t_surface_driver};
-
-	EXPECT_EQ(surface_native(&srf, NULL), 1);
 
 	END;
 }
@@ -874,34 +815,27 @@ STEST(surface)
 {
 	SSTART;
 
-	RUN(surface_init_null_surface);
-	RUN(surface_init_null_driver);
-	RUN(surface_init_null_config);
-	RUN(surface_plan_null_plan);
-	RUN(surface_plan_null_display);
+	RUN(surface_init_rejects_invalid_arguments);
+	RUN(surface_plan_rejects_invalid_arguments);
 	RUN(surface_plan_skips_non_surface_driver);
 	RUN(surface_plan_returns_driver_plan);
 	RUN(surface_plan_returns_success_without_driver_plan);
 	RUN(surface_init_calls_driver);
 	RUN(surface_init_driver_failure_clears_fields);
+	RUN(surface_init_rejects_driver_without_init);
 	RUN(surface_init_gfx_api_failure);
 	RUN(surface_init_no_compatible_driver);
 	RUN(surface_init_uses_gfx_api_without_gfx);
-	RUN(surface_free_null_surface);
-	RUN(surface_free_without_driver);
-	RUN(surface_config_window_null_surface);
-	RUN(surface_config_window_null_config);
+	RUN(surface_free_rejects_invalid_arguments);
+	RUN(surface_config_window_rejects_invalid_arguments);
 	RUN(surface_config_window_calls_driver);
-	RUN(surface_bind_null_surface);
-	RUN(surface_bind_null_window);
+	RUN(surface_bind_rejects_invalid_arguments);
 	RUN(surface_bind_calls_driver);
-	RUN(surface_unbind_null_surface);
+	RUN(surface_unbind_rejects_invalid_arguments);
 	RUN(surface_unbind_calls_driver);
-	RUN(surface_native_null_surface);
-	RUN(surface_native_calls_driver);
-	RUN(surface_native_sets_native);
+	RUN(surface_native_rejects_invalid_arguments);
+	RUN(surface_native_calls_driver_and_sets_native);
 	RUN(surface_native_returns_driver_result);
-	RUN(surface_native_null_native);
 	RUN(surface_gfx_supported_rejects_invalid_config);
 	RUN(surface_gfx_supported_returns_zero_without_driver);
 	RUN(surface_gfx_supported_accepts_missing_plan);

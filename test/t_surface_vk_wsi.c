@@ -290,7 +290,7 @@ TEST(surface_vk_wsi_driver_is_registered)
 	END;
 }
 
-TEST(surface_vk_wsi_plan_x11_extension_count)
+TEST(surface_vk_wsi_plan_x11_extensions)
 {
 	START;
 
@@ -300,33 +300,7 @@ TEST(surface_vk_wsi_plan_x11_extension_count)
 
 	EXPECT_EQ(surface_plan(&plan, &(surface_plan_config_t){.display = &display, .gfx_api = GFX_API_VULKAN}), 0);
 	EXPECT_EQ(plan.gfx.instance_extension_count, 2);
-
-	END;
-}
-
-TEST(surface_vk_wsi_plan_x11_platform_extension)
-{
-	START;
-
-	t_surface_vk_wsi_reset();
-	display_t display   = {.drv = &t_surface_vk_wsi_display_driver};
-	surface_plan_t plan = {0};
-
-	EXPECT_EQ(surface_plan(&plan, &(surface_plan_config_t){.display = &display, .gfx_api = GFX_API_VULKAN}), 0);
 	EXPECT_EQ(t_strcmp(plan.gfx.instance_extensions[1], "VK_KHR_xlib_surface"), 0);
-
-	END;
-}
-
-TEST(surface_vk_wsi_plan_has_no_device_extensions)
-{
-	START;
-
-	t_surface_vk_wsi_reset();
-	display_t display   = {.drv = &t_surface_vk_wsi_display_driver};
-	surface_plan_t plan = {0};
-
-	EXPECT_EQ(surface_plan(&plan, &(surface_plan_config_t){.display = &display, .gfx_api = GFX_API_VULKAN}), 0);
 	EXPECT_EQ(plan.gfx.device_extension_count, 0);
 
 	END;
@@ -425,6 +399,30 @@ TEST(surface_vk_wsi_init_null_surface)
 	surface_config_t config = {0};
 
 	EXPECT_EQ(drv->init(NULL, &config), 1);
+
+	END;
+}
+
+TEST(surface_vk_wsi_init_rejects_unavailable_native_gfx)
+{
+	START;
+
+	t_surface_vk_wsi_reset();
+	t_gfx_native_instance = 0;
+	surface_driver_t *drv = t_surface_vk_wsi_driver();
+	EXPECT_NOT_NULL(drv);
+	gfx_t gfx		= {.drv = &t_surface_vk_wsi_gfx_driver};
+	display_t display	= {.drv = &t_surface_vk_wsi_display_driver};
+	surface_t surface	= {.alloc = ALLOC_STD};
+	surface_config_t config = {
+		.display = &display,
+		.gfx	 = &gfx,
+	};
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(drv->init(&surface, &config), 1);
+	log_set_quiet(0, 0);
+	EXPECT_NULL(surface.data);
 
 	END;
 }
@@ -585,7 +583,7 @@ TEST(surface_vk_wsi_config_window_missing_display_handle)
 	END;
 }
 
-TEST(surface_vk_wsi_config_window_sets_depth)
+TEST(surface_vk_wsi_config_window_sets_defaults)
 {
 	START;
 
@@ -594,51 +592,17 @@ TEST(surface_vk_wsi_config_window_sets_depth)
 	gfx_t gfx	       = {0};
 	display_t display      = {0};
 	surface_t surface      = {0};
-	window_config_t config = {.depth = 24};
+	window_config_t config = {
+		.depth	    = 24,
+		.visual	    = 1234,
+		.background = WINDOW_BACKGROUND_DEFAULT,
+	};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 
 	surface_config_window(&surface, &config);
 
 	EXPECT_EQ(config.depth, 0);
-
-	t_surface_vk_wsi_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_vk_wsi_config_window_sets_visual)
-{
-	START;
-
-	t_surface_vk_wsi_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {.visual = 1234};
-	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
-
-	surface_config_window(&surface, &config);
-
 	EXPECT_EQ(config.visual, 0);
-
-	t_surface_vk_wsi_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_vk_wsi_config_window_omits_background)
-{
-	START;
-
-	t_surface_vk_wsi_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
-	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
-
-	surface_config_window(&surface, &config);
-
 	EXPECT_EQ(config.background, WINDOW_BACKGROUND_NONE);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -687,33 +651,6 @@ TEST(surface_vk_wsi_bind_x11_creates_surface)
 	surface_bind(&surface, &window);
 
 	EXPECT_EQ(t_vk_create_xlib_surface_calls, 1);
-
-	t_surface_vk_wsi_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_vk_wsi_bind_x11_passes_window)
-{
-	START;
-
-	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
-	proc_init(&proc, 0, 1, ALLOC_STD);
-	t_surface_vk_wsi_symbols(&proc);
-	gfx			= (gfx_t){.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
-	display			= (display_t){.drv = &t_surface_vk_wsi_display_driver};
-	surface_config_t config = {
-		.display = &display,
-		.gfx	 = &gfx,
-	};
-	EXPECT_NOT_NULL(surface_init(&surface, &config, ALLOC_STD));
-
-	surface_bind(&surface, &window);
-
 	EXPECT_EQ(t_vk_xlib_window, 0x2222);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -763,53 +700,7 @@ TEST(surface_vk_wsi_bind_wayland_creates_surface)
 	surface_bind(&surface, &window);
 
 	EXPECT_EQ(t_vk_create_wayland_surface_calls, 1);
-
-	t_surface_vk_wsi_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_vk_wsi_bind_wayland_passes_display)
-{
-	START;
-
-	t_surface_vk_wsi_reset();
-	t_display_native_type	 = DISPLAY_NATIVE_WAYLAND;
-	t_window_native_type	 = DISPLAY_NATIVE_WAYLAND;
-	t_display_native_display = (void *)0x3333;
-	t_window_native_window	 = (void *)0x4444;
-	proc_t proc		 = {0};
-	gfx_t gfx		 = {0};
-	display_t display	 = {0};
-	surface_t surface	 = {0};
-	window_t window		 = {.display = &display};
-	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
-
-	surface_bind(&surface, &window);
-
 	EXPECT_EQ(t_vk_wayland_display, (wl_display *)0x3333);
-
-	t_surface_vk_wsi_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_vk_wsi_bind_wayland_passes_surface)
-{
-	START;
-
-	t_surface_vk_wsi_reset();
-	t_display_native_type	 = DISPLAY_NATIVE_WAYLAND;
-	t_window_native_type	 = DISPLAY_NATIVE_WAYLAND;
-	t_display_native_display = (void *)0x3333;
-	t_window_native_window	 = (void *)0x4444;
-	proc_t proc		 = {0};
-	gfx_t gfx		 = {0};
-	display_t display	 = {0};
-	surface_t surface	 = {0};
-	window_t window		 = {.display = &display};
-	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
-
-	surface_bind(&surface, &window);
-
 	EXPECT_EQ(t_vk_wayland_surface, (wl_surface *)0x4444);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -1176,13 +1067,11 @@ TEST(surface_vk_wsi_bind_unsupported_native_type)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type = DISPLAY_NATIVE_NONE;
-	t_window_native_type  = DISPLAY_NATIVE_NONE;
-	proc_t proc	      = {0};
-	gfx_t gfx	      = {0};
-	display_t display     = {0};
-	surface_t surface     = {0};
-	window_t window	      = {.display = &display};
+	proc_t proc	  = {0};
+	gfx_t gfx	  = {0};
+	display_t display = {0};
+	surface_t surface = {0};
+	window_t window	  = {.display = &display};
 	proc_init(&proc, 0, 1, ALLOC_STD);
 	t_surface_vk_wsi_symbols(&proc);
 	gfx			= (gfx_t){.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
@@ -1192,6 +1081,8 @@ TEST(surface_vk_wsi_bind_unsupported_native_type)
 		.gfx	 = &gfx,
 	};
 	EXPECT_NOT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	t_display_native_type = DISPLAY_NATIVE_NONE;
+	t_window_native_type  = DISPLAY_NATIVE_NONE;
 
 	log_set_quiet(0, 1);
 	EXPECT_EQ(surface_bind(&surface, &window), 1);
@@ -1353,15 +1244,14 @@ STEST(surface_vk_wsi)
 	SSTART;
 
 	RUN(surface_vk_wsi_driver_is_registered);
-	RUN(surface_vk_wsi_plan_x11_extension_count);
-	RUN(surface_vk_wsi_plan_x11_platform_extension);
-	RUN(surface_vk_wsi_plan_has_no_device_extensions);
+	RUN(surface_vk_wsi_plan_x11_extensions);
 	RUN(surface_vk_wsi_plan_windows_platform_extension);
 	RUN(surface_vk_wsi_plan_wayland_platform_extension);
 	RUN(surface_vk_wsi_plan_rejects_non_vulkan);
 	RUN(surface_vk_wsi_plan_rejects_null_plan);
 	RUN(surface_vk_wsi_init_rejects_non_vulkan);
 	RUN(surface_vk_wsi_init_null_surface);
+	RUN(surface_vk_wsi_init_rejects_unavailable_native_gfx);
 	RUN(surface_vk_wsi_init_alloc_failure);
 	RUN(surface_vk_wsi_init_missing_gfx_native);
 	RUN(surface_vk_wsi_init_missing_destroy_surface);
@@ -1370,16 +1260,11 @@ STEST(surface_vk_wsi)
 	RUN(surface_vk_wsi_config_window_null_surface);
 	RUN(surface_vk_wsi_config_window_native_unavailable);
 	RUN(surface_vk_wsi_config_window_missing_display_handle);
-	RUN(surface_vk_wsi_config_window_sets_depth);
-	RUN(surface_vk_wsi_config_window_sets_visual);
-	RUN(surface_vk_wsi_config_window_omits_background);
+	RUN(surface_vk_wsi_config_window_sets_defaults);
 	RUN(surface_vk_wsi_config_window_accepts_wayland);
 	RUN(surface_vk_wsi_bind_x11_creates_surface);
-	RUN(surface_vk_wsi_bind_x11_passes_window);
 	RUN(surface_vk_wsi_bind_windows_creates_surface);
 	RUN(surface_vk_wsi_bind_wayland_creates_surface);
-	RUN(surface_vk_wsi_bind_wayland_passes_display);
-	RUN(surface_vk_wsi_bind_wayland_passes_surface);
 	RUN(surface_vk_wsi_bind_null_surface);
 	RUN(surface_vk_wsi_bind_display_unavailable);
 	RUN(surface_vk_wsi_bind_window_unavailable);

@@ -117,6 +117,12 @@ static surface_t *surface_init_driver(surface_t *srf, const surface_driver_t *dr
 	srf->alloc  = alloc;
 	srf->config = *config;
 	if (srf->drv->init(srf, config)) {
+		if (srf->drv->free != NULL) {
+			srf->drv->free(srf);
+		}
+		srf->drv    = NULL;
+		srf->config = (surface_config_t){0};
+		srf->data   = NULL;
 		return NULL;
 	}
 

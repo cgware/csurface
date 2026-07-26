@@ -422,7 +422,9 @@ TEST(surface_wgl_init_rejects_non_opengl)
 		.gfx	 = &gfx,
 	};
 
+	log_set_quiet(0, 1);
 	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	log_set_quiet(0, 0);
 
 	proc_free(&proc);
 	END;

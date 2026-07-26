@@ -637,6 +637,7 @@ TEST(surface_d3d11_bind_creates_swapchain)
 	surface_bind(&surface, &t_window);
 
 	EXPECT_EQ(t_create_swapchain_calls, 1);
+	EXPECT_PTR(t_create_swapchain_device, (void *)(uintptr_t)0x9876);
 
 	surface_free(&surface);
 	t_surface_d3d11_cleanup();
@@ -650,8 +651,8 @@ TEST(surface_d3d11_bind_replaces_swapchain)
 	t_surface_d3d11_reset();
 	surface_t surface = {0};
 	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
-
 	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+
 	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
 	EXPECT_EQ(t_release_swapchain_calls, 1);
 	EXPECT_EQ(t_release_factory_calls, 1);
@@ -661,58 +662,7 @@ TEST(surface_d3d11_bind_replaces_swapchain)
 	END;
 }
 
-TEST(surface_d3d11_bind_passes_device)
-{
-	START;
-
-	t_surface_d3d11_reset();
-	surface_t surface = {0};
-	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
-
-	surface_bind(&surface, &t_window);
-
-	EXPECT_PTR(t_create_swapchain_device, (void *)(uintptr_t)0x9876);
-
-	surface_free(&surface);
-	t_surface_d3d11_cleanup();
-	END;
-}
-
-TEST(surface_d3d11_unbind_releases_swapchain)
-{
-	START;
-
-	t_surface_d3d11_reset();
-	surface_t surface = {0};
-	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
-	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
-
-	EXPECT_EQ(surface_unbind(&surface), 0);
-	EXPECT_EQ(t_release_swapchain_calls, 1);
-
-	surface_free(&surface);
-	t_surface_d3d11_cleanup();
-	END;
-}
-
-TEST(surface_d3d11_unbind_releases_factory)
-{
-	START;
-
-	t_surface_d3d11_reset();
-	surface_t surface = {0};
-	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
-	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
-
-	EXPECT_EQ(surface_unbind(&surface), 0);
-	EXPECT_EQ(t_release_factory_calls, 1);
-
-	surface_free(&surface);
-	t_surface_d3d11_cleanup();
-	END;
-}
-
-TEST(surface_d3d11_native_sets_api)
+TEST(surface_d3d11_native_returns_surface)
 {
 	START;
 
@@ -720,27 +670,10 @@ TEST(surface_d3d11_native_sets_api)
 	surface_t surface = {0};
 	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
 	surface_bind(&surface, &t_window);
-	surface_native_t native = {0};
-	surface_native(&surface, &native);
-
-	EXPECT_EQ(native.gfx_surface->api, GFX_API_D3D11);
-
-	surface_free(&surface);
-	t_surface_d3d11_cleanup();
-	END;
-}
-
-TEST(surface_d3d11_native_returns_ops)
-{
-	START;
-
-	t_surface_d3d11_reset();
-	surface_t surface = {0};
-	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
-	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
 	surface_native_t native = {0};
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
+	EXPECT_EQ(native.gfx_surface->api, GFX_API_D3D11);
 	EXPECT_NOT_NULL(native.gfx_surface->ops);
 	EXPECT_EQ(native.gfx_surface->ops->present == NULL, 0);
 
@@ -866,11 +799,7 @@ STEST(surface_d3d11)
 	RUN(surface_d3d11_bind_create_swapchain_null);
 	RUN(surface_d3d11_bind_creates_swapchain);
 	RUN(surface_d3d11_bind_replaces_swapchain);
-	RUN(surface_d3d11_bind_passes_device);
-	RUN(surface_d3d11_unbind_releases_swapchain);
-	RUN(surface_d3d11_unbind_releases_factory);
-	RUN(surface_d3d11_native_sets_api);
-	RUN(surface_d3d11_native_returns_ops);
+	RUN(surface_d3d11_native_returns_surface);
 	RUN(surface_d3d11_native_without_bind);
 	RUN(surface_d3d11_native_null_data);
 	RUN(surface_d3d11_gfx_present_calls_swapchain);

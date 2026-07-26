@@ -9,7 +9,7 @@ STEST(surface_glx);
 STEST(surface_wgl);
 STEST(surface_vk_wsi);
 
-TEST(curface)
+TEST(csurface)
 {
 	SSTART;
 	RUN(surface);
@@ -33,7 +33,7 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
-	t_run(test_curface, 1);
+	t_run(test_csurface, 1);
 
 	int ret = t_finish();
 

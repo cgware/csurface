@@ -548,7 +548,7 @@ TEST(surface_glx_config_window_no_visual)
 	END;
 }
 
-TEST(surface_glx_config_window_sets_depth)
+TEST(surface_glx_config_window_sets_config)
 {
 	START;
 
@@ -563,65 +563,8 @@ TEST(surface_glx_config_window_sets_depth)
 	surface_config_window(&surface, &config);
 
 	EXPECT_EQ(config.depth, 24);
-
-	t_surface_glx_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_glx_config_window_sets_visual)
-{
-	START;
-
-	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
-	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-
-	surface_config_window(&surface, &config);
-
 	EXPECT_EQ(config.visual, 0x12345678);
-
-	t_surface_glx_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_glx_config_window_omits_background)
-{
-	START;
-
-	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
-	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-
-	surface_config_window(&surface, &config);
-
 	EXPECT_EQ(config.background, WINDOW_BACKGROUND_NONE);
-
-	t_surface_glx_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_glx_config_window_queries_version)
-{
-	START;
-
-	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
-	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-
-	surface_config_window(&surface, &config);
-
 	EXPECT_EQ(t_glx_query_version_calls, 1);
 
 	t_surface_glx_close(&proc, &surface);
@@ -761,7 +704,7 @@ TEST(surface_glx_bind_create_context_failure)
 	END;
 }
 
-TEST(surface_glx_native_returns_display)
+TEST(surface_glx_native_returns_display_and_visual)
 {
 	START;
 
@@ -779,30 +722,6 @@ TEST(surface_glx_native_returns_display)
 
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 	EXPECT_PTR(native.display, t_display_native_display);
-	EXPECT_NOT_NULL(native.gfx_surface);
-	EXPECT_EQ(native.gfx_surface->api, GFX_API_OPENGL);
-
-	t_surface_glx_close(&proc, &surface);
-	END;
-}
-
-TEST(surface_glx_native_returns_visual)
-{
-	START;
-
-	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
-	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
-	surface_native_t native = {0};
-
-	EXPECT_EQ(surface_native(&surface, &native), 0);
 	EXPECT_PTR(native.visual, &t_glx_visual);
 	EXPECT_NOT_NULL(native.gfx_surface);
 	EXPECT_EQ(native.gfx_surface->api, GFX_API_OPENGL);
@@ -1109,18 +1028,14 @@ STEST(surface_glx)
 	RUN(surface_glx_config_window_version_unavailable);
 	RUN(surface_glx_config_window_replaces_visual);
 	RUN(surface_glx_config_window_no_visual);
-	RUN(surface_glx_config_window_sets_depth);
-	RUN(surface_glx_config_window_sets_visual);
-	RUN(surface_glx_config_window_omits_background);
-	RUN(surface_glx_config_window_queries_version);
+	RUN(surface_glx_config_window_sets_config);
 	RUN(surface_glx_bind_sets_native_handle);
 	RUN(surface_glx_bind_null_surface);
 	RUN(surface_glx_bind_without_window_config);
 	RUN(surface_glx_bind_native_window_unavailable);
 	RUN(surface_glx_bind_replaces_window);
 	RUN(surface_glx_bind_create_context_failure);
-	RUN(surface_glx_native_returns_display);
-	RUN(surface_glx_native_returns_visual);
+	RUN(surface_glx_native_returns_display_and_visual);
 	RUN(surface_glx_native_without_bind);
 	RUN(surface_glx_native_null_native);
 	RUN(surface_glx_gfx_proc_rejects_null_surface);
