@@ -366,7 +366,19 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 			  target->driver->name);
 		return 1;
 	}
-	if (gfx_pipeline_init(&target->pipeline, &target->gfx, &(gfx_pipeline_config_t){.vs = target->vs, .fs = target->fs}) == NULL) {
+
+	static const gfx_layout_t input_layout[] = {
+		{.index = 0, .semantic = "POSITION", .count = 2, .type = GFX_VALUE_FLOAT32},
+		{.index = 1, .semantic = "COLOR", .count = 4, .type = GFX_VALUE_FLOAT32},
+	};
+
+	gfx_pipeline_config_t pipeline_config = {
+		.vs		   = target->vs,
+		.fs		   = target->fs,
+		.input_layout	   = input_layout,
+		.input_layout_size = sizeof(input_layout),
+	};
+	if (gfx_pipeline_init(&target->pipeline, &target->gfx, &pipeline_config) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize pipeline for driver: %s", target->driver->name);
 		return 1;
 	}
