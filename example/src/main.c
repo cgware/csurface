@@ -1,4 +1,5 @@
 #include "display_driver.h"
+#include "gfx_buffer.h"
 #include "gfx_driver.h"
 #include "gfx_pipeline.h"
 #include "log.h"
@@ -13,6 +14,7 @@ enum {
 typedef struct example_target_s {
 	gfx_driver_t *driver;
 	gfx_t gfx;
+	gfx_buffer_t vb;
 	gfx_shader_t vs;
 	gfx_shader_t fs;
 	gfx_pipeline_t pipeline;
@@ -41,27 +43,7 @@ static int draw(example_target_t *target)
 		return 1;
 	}
 
-	gfx_t *gfx		    = &target->gfx;
-	gfx_vertex_2d_t vertices[3] = {
-		{
-			.x = (float)target->width * 0.5f,
-			.y = (float)target->height * 0.15f,
-			.r = 1.0f,
-			.a = 1.0f,
-		},
-		{
-			.x = (float)target->width * 0.85f,
-			.y = (float)target->height * 0.85f,
-			.g = 1.0f,
-			.a = 1.0f,
-		},
-		{
-			.x = (float)target->width * 0.15f,
-			.y = (float)target->height * 0.85f,
-			.b = 1.0f,
-			.a = 1.0f,
-		},
-	};
+	gfx_t *gfx = &target->gfx;
 	if (gfx_clear_color(gfx, 0.1f, 0.2f, 0.3f, 1.0f)) {
 		log_error("csurface_example", "draw", NULL, "failed to set clear color");
 		return 1;
@@ -74,7 +56,7 @@ static int draw(example_target_t *target)
 		log_error("csurface_example", "draw", NULL, "failed to clear color buffer");
 		return 1;
 	}
-	if (target->driver->draw_triangle_2d != NULL && gfx_draw_triangle_2d(&target->pipeline, vertices)) {
+	if (target->driver->draw_triangle_2d != NULL && gfx_draw_triangle_2d(&target->pipeline, &target->vb)) {
 		log_error("csurface_example", "draw", NULL, "failed to draw triangle");
 		return 1;
 	}
@@ -140,6 +122,39 @@ static int draw_all(example_target_t *targets, u32 count)
 	return 0;
 }
 
+static void set_triangle_vertices(gfx_vertex_2d_t vertices[3])
+{
+	vertices[0] = (gfx_vertex_2d_t){
+		.x = 0.0f,
+		.y = 0.7f,
+		.r = 1.0f,
+		.a = 1.0f,
+	};
+	vertices[1] = (gfx_vertex_2d_t){
+		.x = 0.7f,
+		.y = -0.7f,
+		.g = 1.0f,
+		.a = 1.0f,
+	};
+	vertices[2] = (gfx_vertex_2d_t){
+		.x = -0.7f,
+		.y = -0.7f,
+		.b = 1.0f,
+		.a = 1.0f,
+	};
+}
+
+static int update_triangle_vertices(example_target_t *target)
+{
+	if (target == NULL || target->vb.gfx == NULL) {
+		return 0;
+	}
+
+	gfx_vertex_2d_t vertices[3] = {0};
+	set_triangle_vertices(vertices);
+	return gfx_buffer_set_data(&target->vb, vertices, sizeof(vertices));
+}
+
 static int set_target_size(example_target_t *target, u16 width, u16 height)
 {
 	if (target == NULL || width == 0 || height == 0) {
@@ -173,6 +188,7 @@ static void clear_target_graphics(example_target_t *target)
 	}
 
 	gfx_target_t gfx_target = {.type = GFX_TARGET_NONE};
+	gfx_buffer_free(&target->vb);
 	gfx_shader_free(&target->vs);
 	gfx_shader_free(&target->fs);
 	gfx_pipeline_free(&target->pipeline);
@@ -279,6 +295,22 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 	}
 	if (target->vs.data != NULL) {
 		return 0;
+	}
+	gfx_buffer_config_t vertex_buffer_config = {
+		.type = GFX_BUFFER_VERTEX,
+	};
+	if (gfx_buffer_init(&target->vb, &target->gfx, &vertex_buffer_config) == NULL) {
+		log_error("csurface_example",
+			  "init",
+			  NULL,
+			  "failed to initialize triangle vertex buffer for driver: %s",
+			  target->driver->name);
+		return 1;
+	}
+	if (update_triangle_vertices(target)) {
+		log_error(
+			"csurface_example", "init", NULL, "failed to set triangle vertex buffer data for driver: %s", target->driver->name);
+		return 1;
 	}
 	const char *triangle_src = "vs_in 0 VertexIn {\n"
 				   "\tvec2f position : POSITION;\n"
@@ -388,9 +420,11 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	}
 
 	gfx_t old_gfx		    = target->gfx;
+	gfx_buffer_t old_vb	    = target->vb;
 	gfx_shader_t old_vs	    = target->vs;
 	gfx_shader_t old_fs	    = target->fs;
 	gfx_pipeline_t old_pipeline = target->pipeline;
+	old_vb.gfx		    = &old_gfx;
 	old_vs.gfx		    = &old_gfx;
 	old_fs.gfx		    = &old_gfx;
 	old_pipeline.gfx	    = &old_gfx;
@@ -398,15 +432,18 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	old_surface.config.gfx	    = &old_gfx;
 	next.surface.config.gfx	    = &next.gfx;
 	target->gfx		    = next.gfx;
+	target->vb		    = next.vb;
 	target->vs		    = next.vs;
 	target->fs		    = next.fs;
 	target->pipeline	    = next.pipeline;
+	target->vb.gfx		    = &target->gfx;
 	target->vs.gfx		    = &target->gfx;
 	target->fs.gfx		    = &target->gfx;
 	target->pipeline.gfx	    = &target->gfx;
 	target->surface		    = next.surface;
 	target->surface.config.gfx  = &target->gfx;
 	target->driver		    = driver;
+	gfx_buffer_free(&old_vb);
 	gfx_shader_free(&old_vs);
 	gfx_shader_free(&old_fs);
 	gfx_pipeline_free(&old_pipeline);
