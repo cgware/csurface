@@ -284,7 +284,8 @@ static void t_surface_swx_reset(void)
 	t_put_image_window	      = 0;
 	t_put_image_width	      = 0;
 	t_put_image_height	      = 0;
-	t_image			      = (XImage){
+
+	t_image = (XImage){
 		.bits_per_pixel = 32,
 		.bytes_per_line = 8,
 		.red_mask	= 0x00FF0000,

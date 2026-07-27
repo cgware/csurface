@@ -56,8 +56,28 @@ static int draw(example_target_t *target)
 		log_error("csurface_example", "draw", NULL, "failed to clear color buffer");
 		return 1;
 	}
-	if (target->driver->draw_triangle_2d != NULL && gfx_draw_triangle_2d(&target->pipeline, &target->vb)) {
+	gfx_frame_t frame = {0};
+	if (gfx_begin(gfx, &frame, NULL)) {
+		log_error("csurface_example", "draw", NULL, "failed to begin");
+		return 1;
+	}
+	if (gfx_pipeline_bind(&frame, &target->pipeline)) {
+		log_error("csurface_example", "draw", NULL, "failed to bind pipeline");
+		gfx_end(&frame);
+		return 1;
+	}
+	if (gfx_buffer_bind(&frame, &target->vb)) {
+		log_error("csurface_example", "draw", NULL, "failed to bind vertex buffer");
+		gfx_end(&frame);
+		return 1;
+	}
+	if (gfx_draw(&frame, 3, 0)) {
 		log_error("csurface_example", "draw", NULL, "failed to draw triangle");
+		gfx_end(&frame);
+		return 1;
+	}
+	if (gfx_end(&frame)) {
+		log_error("csurface_example", "draw", NULL, "failed to end");
 		return 1;
 	}
 	if (gfx_present(gfx)) {
