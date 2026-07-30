@@ -329,9 +329,9 @@ static void surface_swx_convert(surface_swx_t *ctx)
 	}
 }
 
-static int surface_swx_gfx_target(gfx_surface_t *surface, gfx_target_t *target)
+static int surface_swx_gfx_memory(gfx_surface_t *surface, gfx_surface_memory_t *memory)
 {
-	if (surface == NULL || surface->data == NULL || target == NULL || target->width == 0 || target->height == 0) {
+	if (surface == NULL || surface->data == NULL || memory == NULL || memory->width == 0 || memory->height == 0) {
 		return 1;
 	}
 
@@ -340,22 +340,16 @@ static int surface_swx_gfx_target(gfx_surface_t *surface, gfx_target_t *target)
 		return 1;
 	}
 
-	if (ctx->image != NULL && ctx->width == target->width && ctx->height == target->height) {
-		*target = (gfx_target_t){
-			.type	 = GFX_TARGET_SURFACE,
-			.format	 = GFX_FORMAT_RGBA8,
-			.data	 = ctx->pixels,
-			.surface = surface,
-			.width	 = ctx->width,
-			.height	 = ctx->height,
-			.stride	 = (size_t)ctx->width * 4,
-		};
+	if (ctx->image != NULL && ctx->width == memory->width && ctx->height == memory->height) {
+		memory->format = GFX_FORMAT_RGBA8;
+		memory->data   = ctx->pixels;
+		memory->stride = (size_t)ctx->width * 4;
 		return 0;
 	}
 
 	surface_swx_free_image(ctx);
 
-	size_t pixels_size = (size_t)target->width * target->height * 4;
+	size_t pixels_size = (size_t)memory->width * memory->height * 4;
 	u8 *pixels	   = alloc_alloc(&ctx->alloc, pixels_size);
 	if (pixels == NULL) {
 		log_error("csurface", "swx", NULL, "failed to allocate surface pixels");
@@ -369,8 +363,8 @@ static int surface_swx_gfx_target(gfx_surface_t *surface, gfx_target_t *target)
 					     X_Z_PIXMAP,
 					     0,
 					     NULL,
-					     target->width,
-					     target->height,
+					     memory->width,
+					     memory->height,
 					     SURFACE_SWX_IMAGE_PAD,
 					     0);
 	if (image == NULL || image->bits_per_pixel <= 0 || image->bytes_per_line <= 0) {
@@ -382,7 +376,7 @@ static int surface_swx_gfx_target(gfx_surface_t *surface, gfx_target_t *target)
 		return 1;
 	}
 
-	size_t image_size = (size_t)image->bytes_per_line * target->height;
+	size_t image_size = (size_t)image->bytes_per_line * memory->height;
 	void *image_data  = alloc_alloc(&ctx->alloc, image_size);
 	if (image_data == NULL) {
 		ctx->swx.DestroyImage(image);
@@ -397,19 +391,13 @@ static int surface_swx_gfx_target(gfx_surface_t *surface, gfx_target_t *target)
 	ctx->image_data	 = image_data;
 	ctx->pixels_size = pixels_size;
 	ctx->image_size	 = image_size;
-	ctx->width	 = target->width;
-	ctx->height	 = target->height;
+	ctx->width	 = memory->width;
+	ctx->height	 = memory->height;
 	ctx->image	 = image;
 
-	*target = (gfx_target_t){
-		.type	 = GFX_TARGET_SURFACE,
-		.format	 = GFX_FORMAT_RGBA8,
-		.data	 = ctx->pixels,
-		.surface = surface,
-		.width	 = ctx->width,
-		.height	 = ctx->height,
-		.stride	 = (size_t)ctx->width * 4,
-	};
+	memory->format = GFX_FORMAT_RGBA8;
+	memory->data   = ctx->pixels;
+	memory->stride = (size_t)ctx->width * 4;
 	return 0;
 }
 
@@ -431,7 +419,7 @@ static int surface_swx_gfx_present(gfx_surface_t *surface)
 
 static const gfx_surface_ops_t surface_swx_gfx_ops = {
 	.present = surface_swx_gfx_present,
-	.target	 = surface_swx_gfx_target,
+	.memory	 = surface_swx_gfx_memory,
 };
 
 static int surface_swx_native(surface_t *srf, surface_native_t *native)

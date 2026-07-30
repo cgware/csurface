@@ -363,15 +363,15 @@ static void t_surface_swx_close(surface_t *surface)
 	proc_free(&t_proc);
 }
 
-static int t_surface_swx_target(surface_t *surface, gfx_target_t *target)
+static int t_surface_swx_memory(surface_t *surface, gfx_surface_memory_t *memory)
 {
 	surface_native_t native = {0};
 	if (surface_native(surface, &native) || native.gfx_surface == NULL || native.gfx_surface->ops == NULL ||
-	    native.gfx_surface->ops->target == NULL) {
+	    native.gfx_surface->ops->memory == NULL) {
 		return 1;
 	}
 
-	return native.gfx_surface->ops->target(native.gfx_surface, target);
+	return native.gfx_surface->ops->memory(native.gfx_surface, memory);
 }
 
 TEST(surface_swx_driver_is_registered)
@@ -750,99 +750,98 @@ TEST(surface_swx_native_rejects_unbound_surface)
 	END;
 }
 
-TEST(surface_swx_gfx_target_rejects_invalid_arguments)
+TEST(surface_swx_gfx_memory_rejects_invalid_arguments)
 {
 	START;
 
 	t_surface_swx_reset();
-	surface_t surface	= {0};
-	surface_native_t native = {0};
-	gfx_target_t target	= {.width = 1, .height = 1};
+	surface_t surface	    = {0};
+	surface_native_t native	    = {0};
+	gfx_surface_memory_t memory = {.width = 1, .height = 1};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
-	EXPECT_EQ(native.gfx_surface->ops->target(NULL, &target), 1);
-	EXPECT_EQ(native.gfx_surface->ops->target(native.gfx_surface, NULL), 1);
-	target.width = 0;
-	EXPECT_EQ(native.gfx_surface->ops->target(native.gfx_surface, &target), 1);
+	EXPECT_EQ(native.gfx_surface->ops->memory(NULL, &memory), 1);
+	EXPECT_EQ(native.gfx_surface->ops->memory(native.gfx_surface, NULL), 1);
+	memory.width = 0;
+	EXPECT_EQ(native.gfx_surface->ops->memory(native.gfx_surface, &memory), 1);
 
 	t_surface_swx_close(&surface);
 	END;
 }
 
-TEST(surface_swx_gfx_target_rejects_unbound_surface)
+TEST(surface_swx_gfx_memory_rejects_unbound_surface)
 {
 	START;
 
 	t_surface_swx_reset();
-	surface_t surface	= {0};
-	surface_native_t native = {0};
-	gfx_target_t target	= {.width = 1, .height = 1};
+	surface_t surface	    = {0};
+	surface_native_t native	    = {0};
+	gfx_surface_memory_t memory = {.width = 1, .height = 1};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 	gfx_surface_t gfx_surface = *native.gfx_surface;
 	EXPECT_EQ(surface_unbind(&surface), 0);
 
-	EXPECT_EQ(gfx_surface.ops->target(&gfx_surface, &target), 1);
+	EXPECT_EQ(gfx_surface.ops->memory(&gfx_surface, &memory), 1);
 
 	t_surface_swx_close(&surface);
 	END;
 }
 
-TEST(surface_swx_gfx_target_allocates_pixels)
+TEST(surface_swx_gfx_memory_allocates_pixels)
 {
 	START;
 
 	t_surface_swx_reset();
-	surface_t surface   = {0};
-	gfx_target_t target = {.width = 2, .height = 2};
+	surface_t surface	    = {0};
+	gfx_surface_memory_t memory = {.width = 2, .height = 2};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
 
-	EXPECT_EQ(t_surface_swx_target(&surface, &target), 0);
-	EXPECT_EQ(target.type, GFX_TARGET_SURFACE);
-	EXPECT_EQ(target.format, GFX_FORMAT_RGBA8);
-	EXPECT_NOT_NULL(target.data);
-	EXPECT_EQ(target.width, 2);
-	EXPECT_EQ(target.height, 2);
-	EXPECT_EQ(target.stride, 8);
+	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
+	EXPECT_EQ(memory.format, GFX_FORMAT_RGBA8);
+	EXPECT_NOT_NULL(memory.data);
+	EXPECT_EQ(memory.width, 2);
+	EXPECT_EQ(memory.height, 2);
+	EXPECT_EQ(memory.stride, 8);
 	EXPECT_EQ(t_create_image_calls, 1);
 
 	t_surface_swx_close(&surface);
 	END;
 }
 
-TEST(surface_swx_gfx_target_reuses_matching_image)
+TEST(surface_swx_gfx_memory_reuses_matching_image)
 {
 	START;
 
 	t_surface_swx_reset();
-	surface_t surface   = {0};
-	gfx_target_t target = {.width = 2, .height = 2};
+	surface_t surface	    = {0};
+	gfx_surface_memory_t memory = {.width = 2, .height = 2};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
-	EXPECT_EQ(t_surface_swx_target(&surface, &target), 0);
-	void *pixels = target.data;
+	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
+	void *pixels = memory.data;
 
-	EXPECT_EQ(t_surface_swx_target(&surface, &target), 0);
-	EXPECT_PTR(target.data, pixels);
+	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
+	EXPECT_PTR(memory.data, pixels);
 	EXPECT_EQ(t_create_image_calls, 1);
 
 	t_surface_swx_close(&surface);
 	END;
 }
 
-TEST(surface_swx_gfx_target_replaces_resized_image)
+TEST(surface_swx_gfx_memory_replaces_resized_image)
 {
 	START;
 
 	t_surface_swx_reset();
-	surface_t surface   = {0};
-	gfx_target_t target = {.width = 2, .height = 2};
+	surface_t surface	    = {0};
+	gfx_surface_memory_t memory = {.width = 2, .height = 2};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
-	EXPECT_EQ(t_surface_swx_target(&surface, &target), 0);
-	target.width  = 1;
-	target.height = 1;
+	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
+	memory.width  = 1;
+	memory.height = 1;
 
-	EXPECT_EQ(t_surface_swx_target(&surface, &target), 0);
+	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
 	EXPECT_EQ(t_destroy_image_calls, 1);
 	EXPECT_EQ(t_create_image_calls, 2);
 
@@ -850,7 +849,7 @@ TEST(surface_swx_gfx_target_replaces_resized_image)
 	END;
 }
 
-TEST(surface_swx_gfx_target_pixels_alloc_failure)
+TEST(surface_swx_gfx_memory_pixels_alloc_failure)
 {
 	START;
 
@@ -871,13 +870,13 @@ TEST(surface_swx_gfx_target_pixels_alloc_failure)
 	t_window = (window_t){.display = &t_display};
 	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
 
-	EXPECT_EQ(t_surface_swx_target(&surface, &(gfx_target_t){.width = 2, .height = 2}), 1);
+	EXPECT_EQ(t_surface_swx_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
 
 	t_surface_swx_close(&surface);
 	END;
 }
 
-TEST(surface_swx_gfx_target_create_image_null)
+TEST(surface_swx_gfx_memory_create_image_null)
 {
 	START;
 
@@ -886,13 +885,13 @@ TEST(surface_swx_gfx_target_create_image_null)
 	surface_t surface   = {0};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
 
-	EXPECT_EQ(t_surface_swx_target(&surface, &(gfx_target_t){.width = 2, .height = 2}), 1);
+	EXPECT_EQ(t_surface_swx_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
 
 	t_surface_swx_close(&surface);
 	END;
 }
 
-TEST(surface_swx_gfx_target_create_image_invalid)
+TEST(surface_swx_gfx_memory_create_image_invalid)
 {
 	START;
 
@@ -901,14 +900,14 @@ TEST(surface_swx_gfx_target_create_image_invalid)
 	surface_t surface	= {0};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
 
-	EXPECT_EQ(t_surface_swx_target(&surface, &(gfx_target_t){.width = 2, .height = 2}), 1);
+	EXPECT_EQ(t_surface_swx_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
 	EXPECT_EQ(t_destroy_image_calls, 1);
 
 	t_surface_swx_close(&surface);
 	END;
 }
 
-TEST(surface_swx_gfx_target_image_data_alloc_failure)
+TEST(surface_swx_gfx_memory_image_data_alloc_failure)
 {
 	START;
 
@@ -929,7 +928,7 @@ TEST(surface_swx_gfx_target_image_data_alloc_failure)
 	t_window = (window_t){.display = &t_display};
 	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
 
-	EXPECT_EQ(t_surface_swx_target(&surface, &(gfx_target_t){.width = 2, .height = 2}), 1);
+	EXPECT_EQ(t_surface_swx_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
 	EXPECT_EQ(t_destroy_image_calls, 1);
 
 	t_surface_swx_close(&surface);
@@ -958,12 +957,12 @@ TEST(surface_swx_gfx_present_flush_failure)
 	START;
 
 	t_surface_swx_reset();
-	t_flush_ret		= 0;
-	surface_t surface	= {0};
-	gfx_target_t target	= {.width = 2, .height = 2};
-	surface_native_t native = {0};
+	t_flush_ret		    = 0;
+	surface_t surface	    = {0};
+	gfx_surface_memory_t memory = {.width = 2, .height = 2};
+	surface_native_t native	    = {0};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
-	EXPECT_EQ(t_surface_swx_target(&surface, &target), 0);
+	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
 	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface), 1);
@@ -982,12 +981,12 @@ TEST(surface_swx_gfx_present_converts_rgba_to_ximage)
 	START;
 
 	t_surface_swx_reset();
-	surface_t surface	= {0};
-	gfx_target_t target	= {.width = 2, .height = 2};
-	surface_native_t native = {0};
+	surface_t surface	    = {0};
+	gfx_surface_memory_t memory = {.width = 2, .height = 2};
+	surface_native_t native	    = {0};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
-	EXPECT_EQ(t_surface_swx_target(&surface, &target), 0);
-	u8 *pixels = target.data;
+	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
+	u8 *pixels = memory.data;
 	pixels[0]  = 0x11;
 	pixels[1]  = 0x22;
 	pixels[2]  = 0x33;
@@ -1018,18 +1017,18 @@ TEST(surface_swx_gfx_present_converts_big_endian_masks)
 	START;
 
 	t_surface_swx_reset();
-	t_image.byte_order	= 1;
-	t_image.bits_per_pixel	= 32;
-	t_image.bytes_per_line	= 8;
-	t_image.red_mask	= 0xFF000000;
-	t_image.green_mask	= 0;
-	t_image.blue_mask	= 0;
-	surface_t surface	= {0};
-	gfx_target_t target	= {.width = 2, .height = 2};
-	surface_native_t native = {0};
+	t_image.byte_order	    = 1;
+	t_image.bits_per_pixel	    = 32;
+	t_image.bytes_per_line	    = 8;
+	t_image.red_mask	    = 0xFF000000;
+	t_image.green_mask	    = 0;
+	t_image.blue_mask	    = 0;
+	surface_t surface	    = {0};
+	gfx_surface_memory_t memory = {.width = 2, .height = 2};
+	surface_native_t native	    = {0};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
-	EXPECT_EQ(t_surface_swx_target(&surface, &target), 0);
-	u8 *pixels = target.data;
+	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
+	u8 *pixels = memory.data;
 	pixels[0]  = 0xFF;
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
@@ -1045,16 +1044,16 @@ TEST(surface_swx_gfx_present_converts_wide_zero_channel)
 	START;
 
 	t_surface_swx_reset();
-	t_image.bits_per_pixel	= 64;
-	t_image.bytes_per_line	= 16;
-	t_image.red_mask	= ~0ul;
-	t_image.green_mask	= 0;
-	t_image.blue_mask	= 0;
-	surface_t surface	= {0};
-	gfx_target_t target	= {.width = 2, .height = 2};
-	surface_native_t native = {0};
+	t_image.bits_per_pixel	    = 64;
+	t_image.bytes_per_line	    = 16;
+	t_image.red_mask	    = ~0ul;
+	t_image.green_mask	    = 0;
+	t_image.blue_mask	    = 0;
+	surface_t surface	    = {0};
+	gfx_surface_memory_t memory = {.width = 2, .height = 2};
+	surface_native_t native	    = {0};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
-	EXPECT_EQ(t_surface_swx_target(&surface, &target), 0);
+	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
 	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface), 0);
@@ -1092,15 +1091,15 @@ STEST(surface_swx)
 	RUN(surface_swx_bind_replaces_existing_window);
 	RUN(surface_swx_native_rejects_invalid_arguments);
 	RUN(surface_swx_native_rejects_unbound_surface);
-	RUN(surface_swx_gfx_target_rejects_invalid_arguments);
-	RUN(surface_swx_gfx_target_rejects_unbound_surface);
-	RUN(surface_swx_gfx_target_allocates_pixels);
-	RUN(surface_swx_gfx_target_reuses_matching_image);
-	RUN(surface_swx_gfx_target_replaces_resized_image);
-	RUN(surface_swx_gfx_target_pixels_alloc_failure);
-	RUN(surface_swx_gfx_target_create_image_null);
-	RUN(surface_swx_gfx_target_create_image_invalid);
-	RUN(surface_swx_gfx_target_image_data_alloc_failure);
+	RUN(surface_swx_gfx_memory_rejects_invalid_arguments);
+	RUN(surface_swx_gfx_memory_rejects_unbound_surface);
+	RUN(surface_swx_gfx_memory_allocates_pixels);
+	RUN(surface_swx_gfx_memory_reuses_matching_image);
+	RUN(surface_swx_gfx_memory_replaces_resized_image);
+	RUN(surface_swx_gfx_memory_pixels_alloc_failure);
+	RUN(surface_swx_gfx_memory_create_image_null);
+	RUN(surface_swx_gfx_memory_create_image_invalid);
+	RUN(surface_swx_gfx_memory_image_data_alloc_failure);
 	RUN(surface_swx_gfx_present_rejects_invalid_arguments);
 	RUN(surface_swx_gfx_present_flush_failure);
 	RUN(surface_swx_gfx_present_converts_rgba_to_ximage);

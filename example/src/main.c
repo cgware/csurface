@@ -1,9 +1,6 @@
 #include "display_driver.h"
-#include "gfx_buffer.h"
 #include "gfx_driver.h"
-#include "gfx_pipeline.h"
 #include "log.h"
-#include "monitor.h"
 #include "surface.h"
 
 enum {
@@ -17,7 +14,10 @@ typedef struct example_target_s {
 	gfx_buffer_t vb;
 	gfx_shader_t vs;
 	gfx_shader_t fs;
+	gfx_render_pass_t render_pass;
+	gfx_framebuffer_t framebuffer;
 	gfx_pipeline_t pipeline;
+	gfx_target_t gfx_target;
 	surface_t surface;
 	window_t window;
 	u32 id;
@@ -43,22 +43,14 @@ static int draw(example_target_t *target)
 		return 1;
 	}
 
-	gfx_t *gfx = &target->gfx;
-	if (gfx_clear_color(gfx, 0.1f, 0.2f, 0.3f, 1.0f)) {
-		log_error("csurface_example", "draw", NULL, "failed to set clear color");
-		return 1;
-	}
-	if (gfx_viewport(gfx, 0, 0, target->width, target->height)) {
-		log_error("csurface_example", "draw", NULL, "failed to set viewport");
-		return 1;
-	}
-	if (gfx_clear(gfx, GFX_CLEAR_COLOR_BUFFER)) {
-		log_error("csurface_example", "draw", NULL, "failed to clear color buffer");
-		return 1;
-	}
 	gfx_frame_t frame = {0};
-	if (gfx_begin(gfx, &frame, NULL)) {
-		log_error("csurface_example", "draw", NULL, "failed to begin");
+	if (gfx_framebuffer_pass_begin(&target->framebuffer,
+				       &frame,
+				       &(gfx_pass_config_t){
+					       .clear	 = {0.1f, 0.2f, 0.3f, 1.0f},
+					       .viewport = {0, 0, target->width, target->height},
+				       })) {
+		log_error("csurface_example", "draw", NULL, "failed to begin render pass");
 		return 1;
 	}
 	if (gfx_pipeline_bind(&frame, &target->pipeline)) {
@@ -80,7 +72,7 @@ static int draw(example_target_t *target)
 		log_error("csurface_example", "draw", NULL, "failed to end");
 		return 1;
 	}
-	if (gfx_present(gfx)) {
+	if (gfx_target_present(&target->gfx_target)) {
 		log_error("csurface_example", "draw", NULL, "failed to present frame");
 		return 1;
 	}
@@ -181,21 +173,31 @@ static int set_target_size(example_target_t *target, u16 width, u16 height)
 		return 1;
 	}
 
+	if (target->gfx_target.gfx != NULL) {
+		int ret = target->framebuffer.gfx != NULL ? gfx_framebuffer_resize(&target->framebuffer, width, height)
+							  : gfx_target_resize(&target->gfx_target, width, height);
+		if (ret) {
+			return 1;
+		}
+		target->width  = width;
+		target->height = height;
+		return 0;
+	}
+
 	surface_native_t native = {0};
 	if (surface_native(&target->surface, &native)) {
 		return 1;
 	}
-	gfx_target_t gfx_target = {
-		.type	 = GFX_TARGET_SURFACE,
-		.format	 = GFX_FORMAT_RGBA8,
-		.surface = native.gfx_surface,
-		.width	 = width,
-		.height	 = height,
-	};
-	if (gfx_set_target(&target->gfx, &gfx_target)) {
+	if (gfx_target_init_surface(&target->gfx_target,
+				    &target->gfx,
+				    &(gfx_surface_target_config_t){
+					    .format  = GFX_FORMAT_RGBA8,
+					    .surface = native.gfx_surface,
+					    .width   = width,
+					    .height  = height,
+				    }) == NULL) {
 		return 1;
 	}
-
 	target->width  = width;
 	target->height = height;
 	return 0;
@@ -207,12 +209,13 @@ static void clear_target_graphics(example_target_t *target)
 		return;
 	}
 
-	gfx_target_t gfx_target = {.type = GFX_TARGET_NONE};
 	gfx_buffer_free(&target->vb);
 	gfx_shader_free(&target->vs);
 	gfx_shader_free(&target->fs);
 	gfx_pipeline_free(&target->pipeline);
-	gfx_set_target(&target->gfx, &gfx_target);
+	gfx_framebuffer_free(&target->framebuffer);
+	gfx_target_free(&target->gfx_target);
+	gfx_render_pass_free(&target->render_pass);
 	surface_free(&target->surface);
 	gfx_free(&target->gfx);
 	target->driver = NULL;
@@ -391,8 +394,23 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		{.index = 0, .semantic = "POSITION", .count = 2, .type = GFX_VALUE_FLOAT32},
 		{.index = 1, .semantic = "COLOR", .count = 4, .type = GFX_VALUE_FLOAT32},
 	};
+	if (gfx_render_pass_init(&target->render_pass,
+				 &target->gfx,
+				 &(gfx_render_pass_config_t){
+					 .color_format = target->gfx_target.format,
+					 .load	       = GFX_LOAD_CLEAR,
+					 .store	       = GFX_STORE_STORE,
+				 }) == NULL) {
+		log_error("csurface_example", "init", NULL, "failed to initialize render pass for driver: %s", target->driver->name);
+		return 1;
+	}
+	if (gfx_framebuffer_init(&target->framebuffer, &target->gfx_target, &target->render_pass) == NULL) {
+		log_error("csurface_example", "init", NULL, "failed to initialize framebuffer for driver: %s", target->driver->name);
+		return 1;
+	}
 
 	gfx_pipeline_config_t pipeline_config = {
+		.render_pass	   = &target->render_pass,
 		.vs		   = target->vs,
 		.fs		   = target->fs,
 		.input_layout	   = input_layout,
@@ -437,48 +455,75 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 		return 0;
 	}
 
-	gfx_target_t gfx_target = {.type = GFX_TARGET_NONE};
-	if (gfx_set_target(&target->gfx, &gfx_target) || surface_unbind(&target->surface)) {
+	gfx_buffer_free(&target->vb);
+	gfx_shader_free(&target->vs);
+	gfx_shader_free(&target->fs);
+	gfx_pipeline_free(&target->pipeline);
+	gfx_framebuffer_free(&target->framebuffer);
+	gfx_target_free(&target->gfx_target);
+	if (surface_unbind(&target->surface)) {
 		clear_target_graphics(&next);
 		return -1;
 	}
 	if (bind_target_graphics(state->display, state->proc, &next, &target->window) ||
 	    set_target_size(&next, target->width, target->height) || init_target_pipeline(&next, state->shader_compiler)) {
 		clear_target_graphics(&next);
-		if (restore_target_graphics(state, target)) {
+		if (restore_target_graphics(state, target) || init_target_pipeline(target, state->shader_compiler)) {
 			return -1;
 		}
 		return 0;
 	}
 
-	gfx_t old_gfx		    = target->gfx;
-	gfx_buffer_t old_vb	    = target->vb;
-	gfx_shader_t old_vs	    = target->vs;
-	gfx_shader_t old_fs	    = target->fs;
-	gfx_pipeline_t old_pipeline = target->pipeline;
-	old_vb.gfx		    = &old_gfx;
-	old_vs.gfx		    = &old_gfx;
-	old_fs.gfx		    = &old_gfx;
-	old_pipeline.gfx	    = &old_gfx;
-	surface_t old_surface	    = target->surface;
-	old_surface.config.gfx	    = &old_gfx;
-	next.surface.config.gfx	    = &next.gfx;
-	target->gfx		    = next.gfx;
-	target->vb		    = next.vb;
-	target->vs		    = next.vs;
-	target->fs		    = next.fs;
-	target->pipeline	    = next.pipeline;
-	target->vb.gfx		    = &target->gfx;
-	target->vs.gfx		    = &target->gfx;
-	target->fs.gfx		    = &target->gfx;
-	target->pipeline.gfx	    = &target->gfx;
-	target->surface		    = next.surface;
-	target->surface.config.gfx  = &target->gfx;
-	target->driver		    = driver;
+	gfx_t old_gfx			  = target->gfx;
+	gfx_buffer_t old_vb		  = target->vb;
+	gfx_shader_t old_vs		  = target->vs;
+	gfx_shader_t old_fs		  = target->fs;
+	gfx_render_pass_t old_render_pass = target->render_pass;
+	gfx_framebuffer_t old_framebuffer = target->framebuffer;
+	gfx_pipeline_t old_pipeline	  = target->pipeline;
+	gfx_target_t old_target		  = target->gfx_target;
+	old_vb.gfx			  = &old_gfx;
+	old_vs.gfx			  = &old_gfx;
+	old_fs.gfx			  = &old_gfx;
+	old_render_pass.gfx		  = &old_gfx;
+	old_framebuffer.gfx		  = &old_gfx;
+	old_framebuffer.target		  = &old_target;
+	old_framebuffer.render_pass	  = &old_render_pass;
+	old_pipeline.gfx		  = &old_gfx;
+	old_pipeline.render_pass	  = &old_render_pass;
+	old_target.gfx			  = &old_gfx;
+	surface_t old_surface		  = target->surface;
+	old_surface.config.gfx		  = &old_gfx;
+	next.surface.config.gfx		  = &next.gfx;
+	target->gfx			  = next.gfx;
+	target->vb			  = next.vb;
+	target->vs			  = next.vs;
+	target->fs			  = next.fs;
+	target->render_pass		  = next.render_pass;
+	target->framebuffer		  = next.framebuffer;
+	target->pipeline		  = next.pipeline;
+	target->vb.gfx			  = &target->gfx;
+	target->vs.gfx			  = &target->gfx;
+	target->fs.gfx			  = &target->gfx;
+	target->render_pass.gfx		  = &target->gfx;
+	target->framebuffer.gfx		  = &target->gfx;
+	target->framebuffer.target	  = &target->gfx_target;
+	target->framebuffer.render_pass	  = &target->render_pass;
+	target->pipeline.gfx		  = &target->gfx;
+	target->pipeline.render_pass	  = &target->render_pass;
+	if (gfx_target_move(&target->gfx_target, &next.gfx_target, &target->gfx)) {
+		return -1;
+	}
+	target->surface		   = next.surface;
+	target->surface.config.gfx = &target->gfx;
+	target->driver		   = driver;
 	gfx_buffer_free(&old_vb);
 	gfx_shader_free(&old_vs);
 	gfx_shader_free(&old_fs);
 	gfx_pipeline_free(&old_pipeline);
+	gfx_framebuffer_free(&old_framebuffer);
+	gfx_target_free(&old_target);
+	gfx_render_pass_free(&old_render_pass);
 	surface_free(&old_surface);
 	gfx_free(&old_gfx);
 
