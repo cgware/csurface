@@ -17,6 +17,7 @@ typedef struct example_target_s {
 	gfx_render_pass_t render_pass;
 	gfx_framebuffer_t framebuffer;
 	gfx_pipeline_t pipeline;
+	gfx_swapchain_t swapchain;
 	gfx_target_t gfx_target;
 	surface_t surface;
 	window_t window;
@@ -44,12 +45,12 @@ static int draw(example_target_t *target)
 	}
 
 	gfx_frame_t frame = {0};
-	if (gfx_framebuffer_pass_begin(&target->framebuffer,
-				       &frame,
-				       &(gfx_pass_config_t){
-					       .clear	 = {0.1f, 0.2f, 0.3f, 1.0f},
-					       .viewport = {0, 0, target->width, target->height},
-				       })) {
+
+	gfx_pass_config_t pass_config = {
+		.clear	  = {0.1f, 0.2f, 0.3f, 1.0f},
+		.viewport = {0, 0, target->width, target->height},
+	};
+	if (gfx_framebuffer_pass_begin(&target->framebuffer, &frame, &pass_config)) {
 		log_error("csurface_example", "draw", NULL, "failed to begin render pass");
 		return 1;
 	}
@@ -72,7 +73,7 @@ static int draw(example_target_t *target)
 		log_error("csurface_example", "draw", NULL, "failed to end");
 		return 1;
 	}
-	if (gfx_target_present(&target->gfx_target)) {
+	if (gfx_swapchain_present(&target->swapchain)) {
 		log_error("csurface_example", "draw", NULL, "failed to present frame");
 		return 1;
 	}
@@ -173,9 +174,9 @@ static int set_target_size(example_target_t *target, u16 width, u16 height)
 		return 1;
 	}
 
-	if (target->gfx_target.gfx != NULL) {
+	if (target->swapchain.gfx != NULL) {
 		int ret = target->framebuffer.gfx != NULL ? gfx_framebuffer_resize(&target->framebuffer, width, height)
-							  : gfx_target_resize(&target->gfx_target, width, height);
+							  : gfx_swapchain_resize(&target->swapchain, width, height);
 		if (ret) {
 			return 1;
 		}
@@ -188,14 +189,15 @@ static int set_target_size(example_target_t *target, u16 width, u16 height)
 	if (surface_native(&target->surface, &native)) {
 		return 1;
 	}
-	if (gfx_target_init_surface(&target->gfx_target,
-				    &target->gfx,
-				    &(gfx_surface_target_config_t){
-					    .format  = GFX_FORMAT_RGBA8,
-					    .surface = native.gfx_surface,
-					    .width   = width,
-					    .height  = height,
-				    }) == NULL) {
+	gfx_swapchain_config_t swapchain_config = {
+		.format	 = GFX_FORMAT_RGBA8,
+		.surface = native.gfx_surface,
+		.width	 = width,
+		.height	 = height,
+	};
+	if (gfx_swapchain_init(&target->swapchain, &target->gfx, &swapchain_config) == NULL ||
+	    gfx_target_init_swapchain(&target->gfx_target, &target->swapchain) == NULL) {
+		gfx_swapchain_free(&target->swapchain);
 		return 1;
 	}
 	target->width  = width;
@@ -215,6 +217,7 @@ static void clear_target_graphics(example_target_t *target)
 	gfx_pipeline_free(&target->pipeline);
 	gfx_framebuffer_free(&target->framebuffer);
 	gfx_target_free(&target->gfx_target);
+	gfx_swapchain_free(&target->swapchain);
 	gfx_render_pass_free(&target->render_pass);
 	surface_free(&target->surface);
 	gfx_free(&target->gfx);
@@ -481,6 +484,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	gfx_render_pass_t old_render_pass = target->render_pass;
 	gfx_framebuffer_t old_framebuffer = target->framebuffer;
 	gfx_pipeline_t old_pipeline	  = target->pipeline;
+	gfx_swapchain_t old_swapchain	  = target->swapchain;
 	gfx_target_t old_target		  = target->gfx_target;
 	old_vb.gfx			  = &old_gfx;
 	old_vs.gfx			  = &old_gfx;
@@ -491,7 +495,9 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	old_framebuffer.render_pass	  = &old_render_pass;
 	old_pipeline.gfx		  = &old_gfx;
 	old_pipeline.render_pass	  = &old_render_pass;
+	old_swapchain.gfx		  = &old_gfx;
 	old_target.gfx			  = &old_gfx;
+	old_target.swapchain		  = &old_swapchain;
 	surface_t old_surface		  = target->surface;
 	old_surface.config.gfx		  = &old_gfx;
 	next.surface.config.gfx		  = &next.gfx;
@@ -502,6 +508,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	target->render_pass		  = next.render_pass;
 	target->framebuffer		  = next.framebuffer;
 	target->pipeline		  = next.pipeline;
+	target->swapchain		  = next.swapchain;
 	target->vb.gfx			  = &target->gfx;
 	target->vs.gfx			  = &target->gfx;
 	target->fs.gfx			  = &target->gfx;
@@ -511,18 +518,21 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	target->framebuffer.render_pass	  = &target->render_pass;
 	target->pipeline.gfx		  = &target->gfx;
 	target->pipeline.render_pass	  = &target->render_pass;
+	target->swapchain.gfx		  = &target->gfx;
 	if (gfx_target_move(&target->gfx_target, &next.gfx_target, &target->gfx)) {
 		return -1;
 	}
-	target->surface		   = next.surface;
-	target->surface.config.gfx = &target->gfx;
-	target->driver		   = driver;
+	target->gfx_target.swapchain = &target->swapchain;
+	target->surface		     = next.surface;
+	target->surface.config.gfx   = &target->gfx;
+	target->driver		     = driver;
 	gfx_buffer_free(&old_vb);
 	gfx_shader_free(&old_vs);
 	gfx_shader_free(&old_fs);
 	gfx_pipeline_free(&old_pipeline);
 	gfx_framebuffer_free(&old_framebuffer);
 	gfx_target_free(&old_target);
+	gfx_swapchain_free(&old_swapchain);
 	gfx_render_pass_free(&old_render_pass);
 	surface_free(&old_surface);
 	gfx_free(&old_gfx);
