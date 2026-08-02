@@ -12,6 +12,7 @@ typedef struct example_target_s {
 	gfx_driver_t *driver;
 	gfx_t gfx;
 	gfx_buffer_t vb;
+	gfx_buffer_t ib;
 	gfx_shader_t vs;
 	gfx_shader_t fs;
 	gfx_render_pass_t render_pass;
@@ -64,7 +65,12 @@ static int draw(example_target_t *target)
 		gfx_end(&frame);
 		return 1;
 	}
-	if (gfx_draw(&frame, 3, 0)) {
+	if (gfx_buffer_bind(&frame, &target->ib)) {
+		log_error("csurface_example", "draw", NULL, "failed to bind index buffer");
+		gfx_end(&frame);
+		return 1;
+	}
+	if (gfx_draw_indexed(&frame, 3)) {
 		log_error("csurface_example", "draw", NULL, "failed to draw triangle");
 		gfx_end(&frame);
 		return 1;
@@ -157,6 +163,13 @@ static void set_triangle_vertices(gfx_vertex_2d_t vertices[3])
 	};
 }
 
+static void set_triangle_indices(unsigned int indices[3])
+{
+	indices[0] = 0;
+	indices[1] = 1;
+	indices[2] = 2;
+}
+
 static int update_triangle_vertices(example_target_t *target)
 {
 	if (target == NULL || target->vb.gfx == NULL) {
@@ -166,6 +179,17 @@ static int update_triangle_vertices(example_target_t *target)
 	gfx_vertex_2d_t vertices[3] = {0};
 	set_triangle_vertices(vertices);
 	return gfx_buffer_set_data(&target->vb, vertices, sizeof(vertices));
+}
+
+static int update_triangle_indices(example_target_t *target)
+{
+	if (target == NULL || target->ib.gfx == NULL) {
+		return 0;
+	}
+
+	unsigned int indices[3] = {0};
+	set_triangle_indices(indices);
+	return gfx_buffer_set_data(&target->ib, indices, sizeof(indices));
 }
 
 static int set_target_size(example_target_t *target, u16 width, u16 height)
@@ -211,6 +235,7 @@ static void clear_target_graphics(example_target_t *target)
 		return;
 	}
 
+	gfx_buffer_free(&target->ib);
 	gfx_buffer_free(&target->vb);
 	gfx_shader_free(&target->vs);
 	gfx_shader_free(&target->fs);
@@ -338,6 +363,22 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 			"csurface_example", "init", NULL, "failed to set triangle vertex buffer data for driver: %s", target->driver->name);
 		return 1;
 	}
+	gfx_buffer_config_t index_buffer_config = {
+		.type = GFX_BUFFER_INDEX,
+	};
+	if (gfx_buffer_init(&target->ib, &target->gfx, &index_buffer_config) == NULL) {
+		log_error("csurface_example",
+			  "init",
+			  NULL,
+			  "failed to initialize triangle index buffer for driver: %s",
+			  target->driver->name);
+		return 1;
+	}
+	if (update_triangle_indices(target)) {
+		log_error(
+			"csurface_example", "init", NULL, "failed to set triangle index buffer data for driver: %s", target->driver->name);
+		return 1;
+	}
 	const char *triangle_src = "vs_in 0 VertexIn {\n"
 				   "\tvec2f position : POSITION;\n"
 				   "\tvec4f color : COLOR0;\n"
@@ -458,6 +499,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 		return 0;
 	}
 
+	gfx_buffer_free(&target->ib);
 	gfx_buffer_free(&target->vb);
 	gfx_shader_free(&target->vs);
 	gfx_shader_free(&target->fs);
@@ -478,6 +520,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	}
 
 	gfx_t old_gfx			  = target->gfx;
+	gfx_buffer_t old_ib		  = target->ib;
 	gfx_buffer_t old_vb		  = target->vb;
 	gfx_shader_t old_vs		  = target->vs;
 	gfx_shader_t old_fs		  = target->fs;
@@ -486,6 +529,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	gfx_pipeline_t old_pipeline	  = target->pipeline;
 	gfx_swapchain_t old_swapchain	  = target->swapchain;
 	gfx_target_t old_target		  = target->gfx_target;
+	old_ib.gfx			  = &old_gfx;
 	old_vb.gfx			  = &old_gfx;
 	old_vs.gfx			  = &old_gfx;
 	old_fs.gfx			  = &old_gfx;
@@ -502,6 +546,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	old_surface.config.gfx		  = &old_gfx;
 	next.surface.config.gfx		  = &next.gfx;
 	target->gfx			  = next.gfx;
+	target->ib			  = next.ib;
 	target->vb			  = next.vb;
 	target->vs			  = next.vs;
 	target->fs			  = next.fs;
@@ -509,6 +554,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	target->framebuffer		  = next.framebuffer;
 	target->pipeline		  = next.pipeline;
 	target->swapchain		  = next.swapchain;
+	target->ib.gfx			  = &target->gfx;
 	target->vb.gfx			  = &target->gfx;
 	target->vs.gfx			  = &target->gfx;
 	target->fs.gfx			  = &target->gfx;
@@ -526,6 +572,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	target->surface		     = next.surface;
 	target->surface.config.gfx   = &target->gfx;
 	target->driver		     = driver;
+	gfx_buffer_free(&old_ib);
 	gfx_buffer_free(&old_vb);
 	gfx_shader_free(&old_vs);
 	gfx_shader_free(&old_fs);
