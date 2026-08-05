@@ -401,8 +401,10 @@ static int surface_swx_gfx_memory(gfx_surface_t *surface, gfx_surface_memory_t *
 	return 0;
 }
 
-static int surface_swx_gfx_present(gfx_surface_t *surface)
+static int surface_swx_gfx_present(gfx_surface_t *surface, gfx_present_mode_t present_mode)
 {
+	(void)present_mode;
+
 	if (surface == NULL || surface->data == NULL) {
 		return 1;
 	}

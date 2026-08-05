@@ -9,6 +9,8 @@ typedef unsigned long Window;
 typedef unsigned long VisualID;
 typedef int Bool;
 typedef void *GLXContext;
+typedef Window GLXDrawable;
+typedef void (*GLXProc)(void);
 
 typedef struct XVisualInfo_s {
 	Visual *visual;
@@ -35,6 +37,10 @@ typedef struct glx_s {
 	void (*XDestroyContext)(Display *, GLXContext);
 	Bool (*XMakeCurrent)(Display *, Window, GLXContext);
 	void (*XSwapBuffers)(Display *, Window);
+	GLXProc (*GetProcAddress)(const unsigned char *);
+	void (*SwapIntervalEXT)(Display *, GLXDrawable, int);
+	int (*SwapIntervalMESA)(unsigned int);
+	int (*SwapIntervalSGI)(int);
 } glx_t;
 
 typedef struct surface_glx_s {
@@ -46,6 +52,7 @@ typedef struct surface_glx_s {
 	XVisualInfo *visual;
 	Window window;
 	GLXContext context;
+	gfx_present_mode_t present_mode;
 	gfx_surface_t gfx_surface;
 } surface_glx_t;
 
@@ -60,6 +67,57 @@ static int surface_glx_load_symbol(surface_glx_t *ctx, void **sym, strv_t name)
 }
 
 #define LOAD_GLX(_ctx, _name) surface_glx_load_symbol((_ctx), (void **)&(_ctx)->glx._name, STRV("gl" #_name))
+
+static void surface_glx_load_optional_symbol(surface_glx_t *ctx, void **sym, strv_t name)
+{
+	if (proc_dlsym(ctx->proc, ctx->lib, name, sym)) {
+		*sym = NULL;
+	}
+}
+
+static void surface_glx_load_optional_proc_symbol(surface_glx_t *ctx, GLXProc *sym, const char *name)
+{
+	*sym = NULL;
+	if (ctx->glx.GetProcAddress != NULL) {
+		*sym = ctx->glx.GetProcAddress((const unsigned char *)name);
+	}
+	if (*sym == NULL) {
+		union {
+			void *data;
+			GLXProc proc;
+		} loaded = {0};
+		surface_glx_load_optional_symbol(ctx, &loaded.data, strv_cstr(name));
+		*sym = loaded.proc;
+	}
+}
+
+static void surface_glx_load_proc_symbols(surface_glx_t *ctx)
+{
+	union {
+		void *data;
+		GLXProc (*proc)(const unsigned char *);
+	} get_proc = {0};
+
+	surface_glx_load_optional_symbol(ctx, &get_proc.data, STRV("glXGetProcAddress"));
+	if (get_proc.proc == NULL) {
+		surface_glx_load_optional_symbol(ctx, &get_proc.data, STRV("glXGetProcAddressARB"));
+	}
+	ctx->glx.GetProcAddress = get_proc.proc;
+
+	union {
+		GLXProc proc;
+		void (*ext)(Display *, GLXDrawable, int);
+		int (*mesa)(unsigned int);
+		int (*sgi)(int);
+	} symbol = {0};
+
+	surface_glx_load_optional_proc_symbol(ctx, &symbol.proc, "glXSwapIntervalEXT");
+	ctx->glx.SwapIntervalEXT = symbol.ext;
+	surface_glx_load_optional_proc_symbol(ctx, &symbol.proc, "glXSwapIntervalMESA");
+	ctx->glx.SwapIntervalMESA = symbol.mesa;
+	surface_glx_load_optional_proc_symbol(ctx, &symbol.proc, "glXSwapIntervalSGI");
+	ctx->glx.SwapIntervalSGI = symbol.sgi;
+}
 
 static int surface_glx_load(surface_glx_t *ctx, proc_t *proc)
 {
@@ -76,6 +134,7 @@ static int surface_glx_load(surface_glx_t *ctx, proc_t *proc)
 		ctx->lib = NULL;
 		return 1;
 	}
+	surface_glx_load_proc_symbols(ctx);
 
 	return 0;
 }
@@ -119,9 +178,10 @@ static int surface_glx_unbind(surface_t *srf)
 		ctx->glx.XMakeCurrent(ctx->display, 0, NULL);
 		ctx->glx.XDestroyContext(ctx->display, ctx->context);
 	}
-	ctx->window	 = 0;
-	ctx->context	 = NULL;
-	ctx->gfx_surface = (gfx_surface_t){0};
+	ctx->window	  = 0;
+	ctx->context	  = NULL;
+	ctx->present_mode = GFX_PRESENT_MODE_DEFAULT;
+	ctx->gfx_surface  = (gfx_surface_t){0};
 	return 0;
 }
 
@@ -261,13 +321,69 @@ static int surface_glx_gfx_clear_current(gfx_surface_t *surface)
 	return !ctx->glx.XMakeCurrent(ctx->display, 0, NULL);
 }
 
-static int surface_glx_gfx_present(gfx_surface_t *surface)
+static int surface_glx_can_set_swap_interval(surface_glx_t *ctx, gfx_present_mode_t present_mode)
+{
+	if (ctx->glx.SwapIntervalEXT != NULL || ctx->glx.SwapIntervalMESA != NULL) {
+		return 1;
+	}
+	return present_mode == GFX_PRESENT_MODE_VSYNC && ctx->glx.SwapIntervalSGI != NULL;
+}
+
+static int surface_glx_gfx_present_mode(gfx_surface_t *surface, gfx_present_mode_t requested, gfx_present_mode_t *actual)
+{
+	if (surface == NULL || surface->data == NULL || actual == NULL) {
+		return 1;
+	}
+
+	surface_glx_t *ctx = surface->data;
+	switch (requested) {
+	case GFX_PRESENT_MODE_DEFAULT:
+		*actual = GFX_PRESENT_MODE_DEFAULT;
+		return 0;
+	case GFX_PRESENT_MODE_IMMEDIATE:
+		*actual = surface_glx_can_set_swap_interval(ctx, requested) ? GFX_PRESENT_MODE_IMMEDIATE : GFX_PRESENT_MODE_DEFAULT;
+		return 0;
+	case GFX_PRESENT_MODE_MAILBOX:
+	case GFX_PRESENT_MODE_VSYNC:
+		*actual =
+			surface_glx_can_set_swap_interval(ctx, GFX_PRESENT_MODE_VSYNC) ? GFX_PRESENT_MODE_VSYNC : GFX_PRESENT_MODE_DEFAULT;
+		return 0;
+	default:
+		return 1;
+	}
+}
+
+static int surface_glx_set_swap_interval(surface_glx_t *ctx, gfx_present_mode_t present_mode)
+{
+	int interval = present_mode == GFX_PRESENT_MODE_IMMEDIATE ? 0 : 1;
+	if (ctx->present_mode == present_mode || present_mode == GFX_PRESENT_MODE_DEFAULT) {
+		return 0;
+	}
+	if (ctx->glx.SwapIntervalEXT != NULL) {
+		ctx->glx.SwapIntervalEXT(ctx->display, ctx->window, interval);
+	} else if (ctx->glx.SwapIntervalMESA != NULL) {
+		if (ctx->glx.SwapIntervalMESA((unsigned int)interval)) {
+			return 1;
+		}
+	} else if (ctx->glx.SwapIntervalSGI != NULL && interval > 0) {
+		if (ctx->glx.SwapIntervalSGI(interval)) {
+			return 1;
+		}
+	}
+	ctx->present_mode = present_mode;
+	return 0;
+}
+
+static int surface_glx_gfx_present(gfx_surface_t *surface, gfx_present_mode_t present_mode)
 {
 	if (surface == NULL || surface->data == NULL) {
 		return 1;
 	}
 
 	surface_glx_t *ctx = surface->data;
+	if (surface_glx_set_swap_interval(ctx, present_mode)) {
+		return 1;
+	}
 	ctx->glx.XSwapBuffers(ctx->display, ctx->window);
 	return 0;
 }
@@ -276,6 +392,7 @@ static const gfx_surface_ops_t surface_glx_gfx_ops = {
 	.proc	       = surface_glx_gfx_proc,
 	.make_current  = surface_glx_gfx_make_current,
 	.clear_current = surface_glx_gfx_clear_current,
+	.present_mode  = surface_glx_gfx_present_mode,
 	.present       = surface_glx_gfx_present,
 };
 

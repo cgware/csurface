@@ -945,8 +945,8 @@ TEST(surface_swx_gfx_present_rejects_invalid_arguments)
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
-	EXPECT_EQ(native.gfx_surface->ops->present(NULL), 1);
-	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface), 1);
+	EXPECT_EQ(native.gfx_surface->ops->present(NULL, GFX_PRESENT_MODE_DEFAULT), 1);
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 1);
 
 	t_surface_swx_close(&surface);
 	END;
@@ -965,7 +965,7 @@ TEST(surface_swx_gfx_present_flush_failure)
 	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
-	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface), 1);
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 1);
 	EXPECT_EQ(t_put_image_calls, 1);
 	EXPECT_EQ(t_flush_calls, 1);
 	EXPECT_EQ(t_put_image_window, t_window_native_window);
@@ -995,7 +995,7 @@ TEST(surface_swx_gfx_present_converts_rgba_to_ximage)
 	pixels[6]  = 0x66;
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
-	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface), 0);
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 0);
 	EXPECT_EQ(t_put_image_calls, 1);
 	EXPECT_EQ(t_flush_calls, 1);
 	EXPECT_EQ(t_put_image_window, t_window_native_window);
@@ -1032,7 +1032,7 @@ TEST(surface_swx_gfx_present_converts_big_endian_masks)
 	pixels[0]  = 0xFF;
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
-	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface), 0);
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 0);
 	EXPECT_EQ((u8)t_image.data[0], 0xFF);
 
 	t_surface_swx_close(&surface);
@@ -1056,7 +1056,7 @@ TEST(surface_swx_gfx_present_converts_wide_zero_channel)
 	EXPECT_EQ(t_surface_swx_memory(&surface, &memory), 0);
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
-	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface), 0);
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 0);
 	EXPECT_EQ((u8)t_image.data[0], 0);
 	EXPECT_EQ((u8)t_image.data[7], 0);
 

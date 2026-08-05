@@ -1,11 +1,15 @@
+#include "ctime.h"
 #include "display_driver.h"
 #include "gfx_driver.h"
 #include "log.h"
+#include "print.h"
 #include "surface.h"
 
 enum {
 	EXAMPLE_MAX_TARGETS  = 8,
 	EXAMPLE_MAX_DISPLAYS = 8,
+	EXAMPLE_FPS_INTERVAL = 1000,
+	EXAMPLE_TITLE_SIZE   = 128,
 };
 
 typedef struct example_target_s {
@@ -25,6 +29,10 @@ typedef struct example_target_s {
 	u32 id;
 	u16 width;
 	u16 height;
+	u64 fps_time;
+	u32 fps_frames;
+	u32 fps;
+	int redraw;
 	int open;
 	int initialized;
 } example_target_t;
@@ -98,6 +106,38 @@ static int window_position(u16 *position, s32 origin, u32 offset)
 	return 0;
 }
 
+static int update_target_title(example_target_t *target)
+{
+	if (target == NULL || target->driver == NULL) {
+		return 1;
+	}
+
+	char title[EXAMPLE_TITLE_SIZE];
+	if (c_sprintf(title, sizeof(title), 0, "%s - %u FPS", target->driver->name, target->fps) < 0) {
+		return 1;
+	}
+
+	return window_set_title(&target->window, strv_cstr(title));
+}
+
+static int update_target_fps(example_target_t *target, u64 now)
+{
+	if (target == NULL) {
+		return 1;
+	}
+
+	target->fps_frames++;
+	u64 elapsed = now - target->fps_time;
+	if (elapsed < EXAMPLE_FPS_INTERVAL) {
+		return 0;
+	}
+
+	target->fps	   = (u32)(((u64)target->fps_frames * EXAMPLE_FPS_INTERVAL) / elapsed);
+	target->fps_frames = 0;
+	target->fps_time   = now;
+	return update_target_title(target);
+}
+
 static int print_monitors(display_t *display, const char *driver_name, display_monitor_t *show_monitor, int *has_monitor)
 {
 	arr_t monitors = {0};
@@ -128,12 +168,25 @@ static int print_monitors(display_t *display, const char *driver_name, display_m
 
 static int draw_all(example_target_t *targets, u32 count)
 {
+	u64 now = c_time();
 	for (u32 i = 0; i < count; i++) {
 		if (!targets[i].open) {
 			continue;
 		}
+		if (targets[i].driver->api == GFX_API_SOFTWARE && !targets[i].redraw) {
+			continue;
+		}
 		if (draw(&targets[i])) {
 			log_error("csurface_example", "draw", NULL, "failed to draw with graphics driver: %s", targets[i].driver->name);
+			return 1;
+		}
+		targets[i].redraw = 0;
+		if (update_target_fps(&targets[i], now)) {
+			log_error("csurface_example",
+				  "draw",
+				  NULL,
+				  "failed to update FPS counter for graphics driver: %s",
+				  targets[i].driver->name);
 			return 1;
 		}
 	}
@@ -163,10 +216,11 @@ static int set_target_size(example_target_t *target, u16 width, u16 height)
 		return 1;
 	}
 	gfx_swapchain_config_t swapchain_config = {
-		.format	 = GFX_FORMAT_RGBA8,
-		.surface = native.gfx_surface,
-		.width	 = width,
-		.height	 = height,
+		.format	      = GFX_FORMAT_RGBA8,
+		.surface      = native.gfx_surface,
+		.width	      = width,
+		.height	      = height,
+		.present_mode = GFX_PRESENT_MODE_IMMEDIATE,
 	};
 	if (gfx_swapchain_init(&target->swapchain, &target->gfx, &swapchain_config) == NULL ||
 	    gfx_target_init_swapchain(&target->gfx_target, &target->swapchain) == NULL) {
@@ -525,6 +579,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	target->surface		     = next.surface;
 	target->surface.config.gfx   = &target->gfx;
 	target->driver		     = driver;
+	target->redraw		     = 1;
 	gfx_buffer_free(&old_ib);
 	gfx_buffer_free(&old_vb);
 	gfx_shader_free(&old_vs);
@@ -537,7 +592,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	surface_free(&old_surface);
 	gfx_free(&old_gfx);
 
-	if (window_set_title(&target->window, strv_cstr(driver->name))) {
+	if (update_target_title(target)) {
 		return -1;
 	}
 	return 1;
@@ -652,7 +707,9 @@ static void on_event(display_t *display, const display_event_t *event, void *use
 			log_error(
 				"csurface_example", "event", NULL, "failed to resize graphics target for driver: %s", target->driver->name);
 			state->failed = 1;
+			return;
 		}
+		target->redraw = 1;
 		break;
 	default:
 		break;
@@ -692,7 +749,8 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, c
 		log_error("csurface_example", "init", NULL, "failed to initialize window for graphics driver: %s", driver->name);
 		return fail_target_init(target);
 	}
-	if (window_set_title(&target->window, strv_cstr(driver->name))) {
+	target->fps_time = c_time();
+	if (update_target_title(target)) {
 		log_error("csurface_example", "init", NULL, "failed to set window title for graphics driver: %s", driver->name);
 		return fail_target_init(target);
 	}
@@ -712,10 +770,22 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, c
 		return fail_target_init(target);
 	}
 	target->id	    = window_id(&target->window);
+	target->redraw	    = 1;
 	target->open	    = 1;
 	target->initialized = 1;
 
 	return 1;
+}
+
+static int has_continuous_targets(example_target_t *targets, u32 count)
+{
+	for (u32 i = 0; i < count; i++) {
+		if (targets[i].open && targets[i].driver->api != GFX_API_SOFTWARE) {
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
 static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t *proc, sock_t *sock,
@@ -799,11 +869,13 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 		}
 	}
 	while (ret == 0) {
-		if (display_wait_events(&display)) {
+		int event_ret =
+			has_continuous_targets(targets, target_count) ? display_poll_events(&display) : display_wait_events(&display);
+		if (event_ret) {
 			log_error("csurface_example",
 				  "event",
 				  NULL,
-				  "failed to wait for display events from driver: %s",
+				  "failed to process display events from driver: %s",
 				  display_driver->name);
 			ret = 1;
 			break;

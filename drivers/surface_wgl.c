@@ -10,6 +10,7 @@ typedef unsigned long DWORD;
 typedef unsigned short WORD;
 typedef unsigned char BYTE;
 typedef int BOOL;
+typedef BOOL (*wgl_swap_interval_ext_t)(int);
 
 typedef struct PIXELFORMATDESCRIPTOR_s {
 	WORD nSize;
@@ -60,6 +61,7 @@ typedef struct wgl_s {
 	BOOL (*DeleteContext)(void *);
 	BOOL (*MakeCurrent)(HDC, void *);
 	BOOL (*SwapBuffers)(HDC);
+	wgl_swap_interval_ext_t SwapIntervalEXT;
 } wgl_t;
 
 typedef struct surface_wgl_s {
@@ -72,6 +74,8 @@ typedef struct surface_wgl_s {
 	HDC dc;
 	void *context;
 	int pixel_format;
+	int swap_interval_loaded;
+	gfx_present_mode_t present_mode;
 	gfx_surface_t gfx_surface;
 } surface_wgl_t;
 
@@ -178,11 +182,14 @@ static int surface_wgl_unbind(surface_t *srf)
 	if (ctx->dc != NULL) {
 		ctx->wgl.ReleaseDC(ctx->window, ctx->dc);
 	}
-	ctx->window	  = NULL;
-	ctx->dc		  = NULL;
-	ctx->context	  = NULL;
-	ctx->pixel_format = 0;
-	ctx->gfx_surface  = (gfx_surface_t){0};
+	ctx->window		  = NULL;
+	ctx->dc			  = NULL;
+	ctx->context		  = NULL;
+	ctx->pixel_format	  = 0;
+	ctx->swap_interval_loaded = 0;
+	ctx->wgl.SwapIntervalEXT  = NULL;
+	ctx->present_mode	  = GFX_PRESENT_MODE_DEFAULT;
+	ctx->gfx_surface	  = (gfx_surface_t){0};
 	return 0;
 }
 
@@ -299,13 +306,72 @@ static int surface_wgl_gfx_clear_current(gfx_surface_t *surface)
 	return !ctx->wgl.MakeCurrent(NULL, NULL);
 }
 
-static int surface_wgl_gfx_present(gfx_surface_t *surface)
+static void surface_wgl_load_swap_interval(surface_wgl_t *ctx)
+{
+	if (ctx->swap_interval_loaded) {
+		return;
+	}
+
+	union {
+		void *data;
+		wgl_swap_interval_ext_t proc;
+	} sym;
+	sym.data		  = ctx->wgl.GetProcAddress("wglSwapIntervalEXT");
+	ctx->wgl.SwapIntervalEXT  = sym.proc;
+	ctx->swap_interval_loaded = 1;
+}
+
+static int surface_wgl_gfx_present_mode(gfx_surface_t *surface, gfx_present_mode_t requested, gfx_present_mode_t *actual)
+{
+	if (surface == NULL || surface->data == NULL || actual == NULL) {
+		return 1;
+	}
+
+	surface_wgl_t *ctx = surface->data;
+	surface_wgl_load_swap_interval(ctx);
+	switch (requested) {
+	case GFX_PRESENT_MODE_DEFAULT:
+		*actual = GFX_PRESENT_MODE_DEFAULT;
+		return 0;
+	case GFX_PRESENT_MODE_IMMEDIATE:
+		*actual = ctx->wgl.SwapIntervalEXT != NULL ? GFX_PRESENT_MODE_IMMEDIATE : GFX_PRESENT_MODE_DEFAULT;
+		return 0;
+	case GFX_PRESENT_MODE_MAILBOX:
+	case GFX_PRESENT_MODE_VSYNC:
+		*actual = ctx->wgl.SwapIntervalEXT != NULL ? GFX_PRESENT_MODE_VSYNC : GFX_PRESENT_MODE_DEFAULT;
+		return 0;
+	default:
+		return 1;
+	}
+}
+
+static int surface_wgl_set_swap_interval(surface_wgl_t *ctx, gfx_present_mode_t present_mode)
+{
+	if (ctx->present_mode == present_mode || present_mode == GFX_PRESENT_MODE_DEFAULT) {
+		return 0;
+	}
+
+	surface_wgl_load_swap_interval(ctx);
+	if (ctx->wgl.SwapIntervalEXT == NULL) {
+		return 1;
+	}
+	if (!ctx->wgl.SwapIntervalEXT(present_mode == GFX_PRESENT_MODE_IMMEDIATE ? 0 : 1)) {
+		return 1;
+	}
+	ctx->present_mode = present_mode;
+	return 0;
+}
+
+static int surface_wgl_gfx_present(gfx_surface_t *surface, gfx_present_mode_t present_mode)
 {
 	if (surface == NULL || surface->data == NULL) {
 		return 1;
 	}
 
 	surface_wgl_t *ctx = surface->data;
+	if (surface_wgl_set_swap_interval(ctx, present_mode)) {
+		return 1;
+	}
 	return !ctx->wgl.SwapBuffers(ctx->dc);
 }
 
@@ -313,6 +379,7 @@ static const gfx_surface_ops_t surface_wgl_gfx_ops = {
 	.proc	       = surface_wgl_gfx_proc,
 	.make_current  = surface_wgl_gfx_make_current,
 	.clear_current = surface_wgl_gfx_clear_current,
+	.present_mode  = surface_wgl_gfx_present_mode,
 	.present       = surface_wgl_gfx_present,
 };
 

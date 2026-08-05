@@ -258,7 +258,7 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 	return 0;
 }
 
-static int surface_d3d11_gfx_present(gfx_surface_t *surface)
+static int surface_d3d11_gfx_present(gfx_surface_t *surface, gfx_present_mode_t present_mode)
 {
 	if (surface == NULL || surface->data == NULL) {
 		return 1;
@@ -266,7 +266,7 @@ static int surface_d3d11_gfx_present(gfx_surface_t *surface)
 
 	surface_d3d11_t *ctx	   = surface->data;
 	IDXGISwapChainVTable *swap = *(IDXGISwapChainVTable **)ctx->swapchain;
-	return hresult_ok(swap->Present(ctx->swapchain, 1, 0)) ? 0 : 1;
+	return hresult_ok(swap->Present(ctx->swapchain, present_mode == GFX_PRESENT_MODE_IMMEDIATE ? 0 : 1, 0)) ? 0 : 1;
 }
 
 static const gfx_surface_ops_t surface_d3d11_gfx_ops = {

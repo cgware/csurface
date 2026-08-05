@@ -726,7 +726,7 @@ TEST(surface_d3d11_gfx_present_calls_swapchain)
 	surface_native_t native = {0};
 	surface_native(&surface, &native);
 
-	native.gfx_surface->ops->present(native.gfx_surface);
+	native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT);
 
 	EXPECT_EQ(t_present_calls, 1);
 
@@ -746,7 +746,7 @@ TEST(surface_d3d11_gfx_present_null_surface)
 	surface_native_t native = {0};
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
-	EXPECT_EQ(native.gfx_surface->ops->present(NULL), 1);
+	EXPECT_EQ(native.gfx_surface->ops->present(NULL, GFX_PRESENT_MODE_DEFAULT), 1);
 
 	surface_free(&surface);
 	t_surface_d3d11_cleanup();
@@ -765,7 +765,7 @@ TEST(surface_d3d11_gfx_present_failure)
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 	t_present_ret = -1;
 
-	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface), 1);
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 1);
 
 	surface_free(&surface);
 	t_surface_d3d11_cleanup();
