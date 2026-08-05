@@ -70,7 +70,7 @@ static int draw(example_target_t *target)
 		gfx_end(&frame);
 		return 1;
 	}
-	if (gfx_draw_indexed(&frame, 3)) {
+	if (gfx_draw_indexed(&frame, 6)) {
 		log_error("csurface_example", "draw", NULL, "failed to draw triangle");
 		gfx_end(&frame);
 		return 1;
@@ -139,57 +139,6 @@ static int draw_all(example_target_t *targets, u32 count)
 	}
 
 	return 0;
-}
-
-static void set_triangle_vertices(gfx_vertex_2d_t vertices[3])
-{
-	vertices[0] = (gfx_vertex_2d_t){
-		.x = 0.0f,
-		.y = 0.7f,
-		.r = 1.0f,
-		.a = 1.0f,
-	};
-	vertices[1] = (gfx_vertex_2d_t){
-		.x = 0.7f,
-		.y = -0.7f,
-		.g = 1.0f,
-		.a = 1.0f,
-	};
-	vertices[2] = (gfx_vertex_2d_t){
-		.x = -0.7f,
-		.y = -0.7f,
-		.b = 1.0f,
-		.a = 1.0f,
-	};
-}
-
-static void set_triangle_indices(unsigned int indices[3])
-{
-	indices[0] = 0;
-	indices[1] = 1;
-	indices[2] = 2;
-}
-
-static int update_triangle_vertices(example_target_t *target)
-{
-	if (target == NULL || target->vb.gfx == NULL) {
-		return 0;
-	}
-
-	gfx_vertex_2d_t vertices[3] = {0};
-	set_triangle_vertices(vertices);
-	return gfx_buffer_set_data(&target->vb, vertices, sizeof(vertices));
-}
-
-static int update_triangle_indices(example_target_t *target)
-{
-	if (target == NULL || target->ib.gfx == NULL) {
-		return 0;
-	}
-
-	unsigned int indices[3] = {0};
-	set_triangle_indices(indices);
-	return gfx_buffer_set_data(&target->ib, indices, sizeof(indices));
 }
 
 static int set_target_size(example_target_t *target, u16 width, u16 height)
@@ -347,8 +296,17 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 	if (target->vs.data != NULL) {
 		return 0;
 	}
+	gfx_vertex_2d_t vertices[] = {
+		{0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f},
+		{0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f},
+		{-0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f},
+		{-0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 1.0f},
+	};
 	gfx_buffer_config_t vertex_buffer_config = {
-		.type = GFX_BUFFER_VERTEX,
+		.type  = GFX_BUFFER_VERTEX,
+		.usage = GFX_BUFFER_USAGE_STATIC,
+		.size  = sizeof(vertices),
+		.data  = vertices,
 	};
 	if (gfx_buffer_init(&target->vb, &target->gfx, &vertex_buffer_config) == NULL) {
 		log_error("csurface_example",
@@ -358,13 +316,13 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 			  target->driver->name);
 		return 1;
 	}
-	if (update_triangle_vertices(target)) {
-		log_error(
-			"csurface_example", "init", NULL, "failed to set triangle vertex buffer data for driver: %s", target->driver->name);
-		return 1;
-	}
+	unsigned int indices[] = {0, 1, 3, 1, 2, 3};
+
 	gfx_buffer_config_t index_buffer_config = {
-		.type = GFX_BUFFER_INDEX,
+		.type  = GFX_BUFFER_INDEX,
+		.usage = GFX_BUFFER_USAGE_STATIC,
+		.size  = sizeof(indices),
+		.data  = indices,
 	};
 	if (gfx_buffer_init(&target->ib, &target->gfx, &index_buffer_config) == NULL) {
 		log_error("csurface_example",
@@ -372,11 +330,6 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 			  NULL,
 			  "failed to initialize triangle index buffer for driver: %s",
 			  target->driver->name);
-		return 1;
-	}
-	if (update_triangle_indices(target)) {
-		log_error(
-			"csurface_example", "init", NULL, "failed to set triangle index buffer data for driver: %s", target->driver->name);
 		return 1;
 	}
 	const char *triangle_src = "vs_in 0 VertexIn {\n"
