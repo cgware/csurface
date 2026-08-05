@@ -7,6 +7,7 @@ STEST(surface_d3d11);
 STEST(surface_none);
 STEST(surface_glx);
 STEST(surface_swx);
+STEST(surface_wsw);
 STEST(surface_wgl);
 STEST(surface_vk_wsi);
 
@@ -18,6 +19,7 @@ TEST(csurface)
 	RUN(surface_none);
 	RUN(surface_glx);
 	RUN(surface_swx);
+	RUN(surface_wsw);
 	RUN(surface_wgl);
 	RUN(surface_vk_wsi);
 	SEND;
