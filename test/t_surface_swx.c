@@ -1,3 +1,4 @@
+#include "log.h"
 #include "surface_driver.h"
 
 #include "display_driver.h"
@@ -436,12 +437,14 @@ TEST(surface_swx_init_alloc_failure)
 		.drv = &t_surface_swx_gfx_driver,
 	};
 	surface_t surface = {0};
+	log_set_quiet(0, 1);
 	EXPECT_NULL(surface_init(&surface,
 				 &(surface_config_t){
 					 .display = &t_display,
 					 .gfx	  = &t_gfx,
 				 },
 				 (alloc_t){.alloc = t_surface_swx_alloc, .free = alloc_free_std}));
+	log_set_quiet(0, 0);
 
 	proc_free(&t_proc);
 	END;
@@ -488,12 +491,14 @@ TEST(surface_swx_init_rejects_missing_library)
 		.drv = &t_surface_swx_gfx_driver,
 	};
 	surface_t surface = {0};
+	log_set_quiet(0, 1);
 	EXPECT_NULL(surface_init(&surface,
 				 &(surface_config_t){
 					 .display = &t_display,
 					 .gfx	  = &t_gfx,
 				 },
 				 ALLOC_STD));
+	log_set_quiet(0, 0);
 
 	proc_free(&t_proc);
 	END;
@@ -514,12 +519,14 @@ TEST(surface_swx_init_rejects_missing_symbol)
 		.drv = &t_surface_swx_gfx_driver,
 	};
 	surface_t surface = {0};
+	log_set_quiet(0, 1);
 	EXPECT_NULL(surface_init(&surface,
 				 &(surface_config_t){
 					 .display = &t_display,
 					 .gfx	  = &t_gfx,
 				 },
 				 ALLOC_STD));
+	log_set_quiet(0, 0);
 
 	proc_free(&t_proc);
 	END;
@@ -570,7 +577,9 @@ TEST(surface_swx_config_window_rejects_missing_native_display)
 	EXPECT_EQ(t_surface_swx_open(&surface), 0);
 	t_display_native_ret = 1;
 
+	log_set_quiet(0, 1);
 	EXPECT_EQ(surface_config_window(&surface, &(window_config_t){0}), 1);
+	log_set_quiet(0, 0);
 
 	t_surface_swx_close(&surface);
 	END;
@@ -585,7 +594,9 @@ TEST(surface_swx_config_window_rejects_wrong_native_type)
 	EXPECT_EQ(t_surface_swx_open(&surface), 0);
 	t_display_native_type = DISPLAY_NATIVE_WINDOWS;
 
+	log_set_quiet(0, 1);
 	EXPECT_EQ(surface_config_window(&surface, &(window_config_t){0}), 1);
+	log_set_quiet(0, 0);
 
 	t_surface_swx_close(&surface);
 	END;
@@ -600,7 +611,9 @@ TEST(surface_swx_config_window_rejects_missing_x11_default)
 	EXPECT_EQ(t_surface_swx_open(&surface), 0);
 	t_default_visual_ret = NULL;
 
+	log_set_quiet(0, 1);
 	EXPECT_EQ(surface_config_window(&surface, &(window_config_t){0}), 1);
+	log_set_quiet(0, 0);
 
 	t_surface_swx_close(&surface);
 	END;
@@ -646,7 +659,9 @@ TEST(surface_swx_bind_rejects_missing_native_display)
 	EXPECT_EQ(t_surface_swx_open(&surface), 0);
 	t_display_native_ret = 1;
 
+	log_set_quiet(0, 1);
 	EXPECT_EQ(surface_bind(&surface, &t_window), 1);
+	log_set_quiet(0, 0);
 
 	t_surface_swx_close(&surface);
 	END;
@@ -661,7 +676,9 @@ TEST(surface_swx_bind_rejects_missing_window_native)
 	EXPECT_EQ(t_surface_swx_open(&surface), 0);
 	t_window_native_ret = 1;
 
+	log_set_quiet(0, 1);
 	EXPECT_EQ(surface_bind(&surface, &t_window), 1);
+	log_set_quiet(0, 0);
 
 	t_surface_swx_close(&surface);
 	END;
@@ -676,7 +693,9 @@ TEST(surface_swx_bind_rejects_wrong_window_native_type)
 	EXPECT_EQ(t_surface_swx_open(&surface), 0);
 	t_window_native_type = DISPLAY_NATIVE_WINDOWS;
 
+	log_set_quiet(0, 1);
 	EXPECT_EQ(surface_bind(&surface, &t_window), 1);
+	log_set_quiet(0, 0);
 
 	t_surface_swx_close(&surface);
 	END;
@@ -870,7 +889,9 @@ TEST(surface_swx_gfx_memory_pixels_alloc_failure)
 	t_window = (window_t){.display = &t_display};
 	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
 
+	log_set_quiet(0, 1);
 	EXPECT_EQ(t_surface_swx_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+	log_set_quiet(0, 0);
 
 	t_surface_swx_close(&surface);
 	END;
@@ -885,7 +906,9 @@ TEST(surface_swx_gfx_memory_create_image_null)
 	surface_t surface   = {0};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
 
+	log_set_quiet(0, 1);
 	EXPECT_EQ(t_surface_swx_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+	log_set_quiet(0, 0);
 
 	t_surface_swx_close(&surface);
 	END;
@@ -900,7 +923,9 @@ TEST(surface_swx_gfx_memory_create_image_invalid)
 	surface_t surface	= {0};
 	EXPECT_EQ(t_surface_swx_open_bound(&surface), 0);
 
+	log_set_quiet(0, 1);
 	EXPECT_EQ(t_surface_swx_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+	log_set_quiet(0, 0);
 	EXPECT_EQ(t_destroy_image_calls, 1);
 
 	t_surface_swx_close(&surface);
@@ -928,7 +953,9 @@ TEST(surface_swx_gfx_memory_image_data_alloc_failure)
 	t_window = (window_t){.display = &t_display};
 	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
 
+	log_set_quiet(0, 1);
 	EXPECT_EQ(t_surface_swx_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+	log_set_quiet(0, 0);
 	EXPECT_EQ(t_destroy_image_calls, 1);
 
 	t_surface_swx_close(&surface);

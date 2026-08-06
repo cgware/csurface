@@ -40,10 +40,10 @@ typedef struct BITMAPINFO_s {
 } BITMAPINFO;
 
 enum {
-	BI_RGB			= 0,
-	DIB_RGB_COLORS		= 0,
-	SRCCOPY			= 0x00CC0020,
-	SURFACE_WSW_BIT_COUNT	= 32,
+	BI_RGB		      = 0,
+	DIB_RGB_COLORS	      = 0,
+	SRCCOPY		      = 0x00CC0020,
+	SURFACE_WSW_BIT_COUNT = 32,
 };
 
 typedef struct wsw_s {
@@ -114,9 +114,9 @@ static int surface_wsw_load(surface_wsw_t *ctx, proc_t *proc)
 		return 1;
 	}
 
-	if (LOAD_USER32(ctx, GetDC) || LOAD_USER32(ctx, ReleaseDC) || LOAD_GDI32(ctx, CreateCompatibleDC) ||
-	    LOAD_GDI32(ctx, DeleteDC) || LOAD_GDI32(ctx, CreateDIBSection) || LOAD_GDI32(ctx, SelectObject) ||
-	    LOAD_GDI32(ctx, DeleteObject) || LOAD_GDI32(ctx, BitBlt)) {
+	if (LOAD_USER32(ctx, GetDC) || LOAD_USER32(ctx, ReleaseDC) || LOAD_GDI32(ctx, CreateCompatibleDC) || LOAD_GDI32(ctx, DeleteDC) ||
+	    LOAD_GDI32(ctx, CreateDIBSection) || LOAD_GDI32(ctx, SelectObject) || LOAD_GDI32(ctx, DeleteObject) ||
+	    LOAD_GDI32(ctx, BitBlt)) {
 		surface_wsw_unload(ctx);
 		mem_set(&ctx->wsw, 0, sizeof(ctx->wsw));
 		return 1;
@@ -168,14 +168,14 @@ static void surface_wsw_free_bitmap(surface_wsw_t *ctx)
 		alloc_free(&ctx->alloc, ctx->pixels, ctx->pixels_size);
 	}
 
-	ctx->memory_dc     = NULL;
-	ctx->bitmap	     = NULL;
-	ctx->old_bitmap    = NULL;
-	ctx->pixels	     = NULL;
+	ctx->memory_dc	   = NULL;
+	ctx->bitmap	   = NULL;
+	ctx->old_bitmap	   = NULL;
+	ctx->pixels	   = NULL;
 	ctx->bitmap_pixels = NULL;
 	ctx->pixels_size   = 0;
-	ctx->width	     = 0;
-	ctx->height	     = 0;
+	ctx->width	   = 0;
+	ctx->height	   = 0;
 }
 
 static int surface_wsw_unbind(surface_t *srf)
@@ -189,8 +189,8 @@ static int surface_wsw_unbind(surface_t *srf)
 	if (ctx->dc != NULL) {
 		ctx->wsw.ReleaseDC(ctx->window, ctx->dc);
 	}
-	ctx->window	  = NULL;
-	ctx->dc		  = NULL;
+	ctx->window	 = NULL;
+	ctx->dc		 = NULL;
 	ctx->gfx_surface = (gfx_surface_t){0};
 	return 0;
 }
@@ -276,13 +276,13 @@ static BITMAPINFO surface_wsw_bitmap_info(u16 width, u16 height)
 	return (BITMAPINFO){
 		.bmiHeader =
 			{
-				.biSize	     = (DWORD)sizeof(BITMAPINFOHEADER),
-				.biWidth     = width,
-				.biHeight    = -(LONG)height,
-				.biPlanes    = 1,
-				.biBitCount  = SURFACE_WSW_BIT_COUNT,
+				.biSize	       = (DWORD)sizeof(BITMAPINFOHEADER),
+				.biWidth       = width,
+				.biHeight      = -(LONG)height,
+				.biPlanes      = 1,
+				.biBitCount    = SURFACE_WSW_BIT_COUNT,
 				.biCompression = BI_RGB,
-				.biSizeImage = (DWORD)((size_t)width * height * 4),
+				.biSizeImage   = (DWORD)((size_t)width * height * 4),
 			},
 	};
 }
@@ -312,12 +312,12 @@ static int surface_wsw_create_bitmap(surface_wsw_t *ctx, u16 width, u16 height)
 		return 1;
 	}
 
-	ctx->memory_dc     = memory_dc;
-	ctx->bitmap	     = bitmap;
-	ctx->old_bitmap    = old_bitmap;
+	ctx->memory_dc	   = memory_dc;
+	ctx->bitmap	   = bitmap;
+	ctx->old_bitmap	   = old_bitmap;
 	ctx->bitmap_pixels = bitmap_pixels;
-	ctx->width	     = width;
-	ctx->height	     = height;
+	ctx->width	   = width;
+	ctx->height	   = height;
 	return 0;
 }
 

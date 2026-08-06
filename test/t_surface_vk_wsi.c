@@ -376,12 +376,12 @@ TEST(surface_vk_wsi_init_rejects_non_vulkan)
 	display_t display = {.drv = &t_surface_vk_wsi_display_driver};
 	surface_t surface = {0};
 
-	log_set_quiet(0, 1);
 	surface_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
 
+	log_set_quiet(0, 1);
 	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
 	log_set_quiet(0, 0);
 

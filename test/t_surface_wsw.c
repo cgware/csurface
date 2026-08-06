@@ -1,3 +1,4 @@
+#include "log.h"
 #include "surface_driver.h"
 
 #include "display_driver.h"
@@ -63,6 +64,9 @@ static HBITMAP t_wsw_create_dib_section_ret;
 static HGDIOBJ t_wsw_select_object_ret;
 static BOOL t_wsw_bit_blt_ret;
 static u8 t_wsw_bitmap_pixels[16];
+static int t_wsw_create_dib_section_null_bits;
+static int t_alloc_calls;
+static int t_alloc_fail_at;
 static int t_display_native_ret;
 static display_native_type_t t_display_native_type;
 static void *t_display_native_display;
@@ -82,6 +86,17 @@ static void *t_surface_wsw_symbol(t_surface_wsw_symbol_t fn)
 	} symbol = {.fn = fn};
 
 	return symbol.ptr;
+}
+
+static void *t_surface_wsw_alloc(alloc_t *alloc, size_t size)
+{
+	(void)alloc;
+	t_alloc_calls++;
+	if (t_alloc_fail_at == t_alloc_calls) {
+		return NULL;
+	}
+
+	return alloc_alloc_std(NULL, size);
 }
 
 static HDC t_GetDC(HWND hwnd)
@@ -123,6 +138,10 @@ static HBITMAP t_CreateDIBSection(HDC dc, const BITMAPINFO *info, UINT usage, vo
 	if (info == NULL || info->bmiHeader.biWidth != 2 || info->bmiHeader.biHeight != -2 || info->bmiHeader.biBitCount != 32) {
 		return NULL;
 	}
+	if (t_wsw_create_dib_section_null_bits) {
+		*bits = NULL;
+		return t_wsw_create_dib_section_ret;
+	}
 	*bits = t_wsw_bitmap_pixels;
 	return t_wsw_create_dib_section_ret;
 }
@@ -130,7 +149,7 @@ static HBITMAP t_CreateDIBSection(HDC dc, const BITMAPINFO *info, UINT usage, vo
 static HGDIOBJ t_SelectObject(HDC dc, HGDIOBJ object)
 {
 	t_wsw_select_object_calls++;
-	t_wsw_memory_dc		= dc;
+	t_wsw_memory_dc	      = dc;
 	t_wsw_selected_object = object;
 	return t_wsw_select_object_ret;
 }
@@ -150,8 +169,8 @@ static BOOL t_BitBlt(HDC dc, int x, int y, int width, int height, HDC src_dc, in
 	(void)src_y;
 	(void)rop;
 	t_wsw_bit_blt_calls++;
-	t_wsw_dc	      = dc;
-	t_wsw_memory_dc	      = src_dc;
+	t_wsw_dc	     = dc;
+	t_wsw_memory_dc	     = src_dc;
 	t_wsw_bit_blt_width  = width;
 	t_wsw_bit_blt_height = height;
 	return t_wsw_bit_blt_ret;
@@ -210,36 +229,39 @@ static surface_driver_t *t_surface_wsw_driver(void)
 
 static void t_surface_wsw_reset(void)
 {
-	t_wsw_get_dc_calls		   = 0;
-	t_wsw_release_dc_calls		   = 0;
+	t_wsw_get_dc_calls		 = 0;
+	t_wsw_release_dc_calls		 = 0;
 	t_wsw_create_compatible_dc_calls = 0;
-	t_wsw_delete_dc_calls		   = 0;
-	t_wsw_create_dib_section_calls   = 0;
-	t_wsw_select_object_calls	   = 0;
-	t_wsw_delete_object_calls	   = 0;
-	t_wsw_bit_blt_calls		   = 0;
-	t_wsw_window			   = NULL;
-	t_wsw_dc			   = NULL;
-	t_wsw_memory_dc		   = NULL;
-	t_wsw_selected_object		   = NULL;
-	t_wsw_bit_blt_width		   = 0;
-	t_wsw_bit_blt_height		   = 0;
-	t_wsw_get_dc_ret		   = (HDC)0x1111;
-	t_wsw_create_compatible_dc_ret   = (HDC)0x2222;
-	t_wsw_create_dib_section_ret	   = (HBITMAP)0x3333;
-	t_wsw_select_object_ret	   = (HGDIOBJ)0x4444;
-	t_wsw_bit_blt_ret		   = 1;
+	t_wsw_delete_dc_calls		 = 0;
+	t_wsw_create_dib_section_calls	 = 0;
+	t_wsw_select_object_calls	 = 0;
+	t_wsw_delete_object_calls	 = 0;
+	t_wsw_bit_blt_calls		 = 0;
+	t_wsw_window			 = NULL;
+	t_wsw_dc			 = NULL;
+	t_wsw_memory_dc			 = NULL;
+	t_wsw_selected_object		 = NULL;
+	t_wsw_bit_blt_width		 = 0;
+	t_wsw_bit_blt_height		 = 0;
+	t_wsw_get_dc_ret		 = (HDC)0x1111;
+	t_wsw_create_compatible_dc_ret	 = (HDC)0x2222;
+	t_wsw_create_dib_section_ret	 = (HBITMAP)0x3333;
+	t_wsw_select_object_ret		 = (HGDIOBJ)0x4444;
+	t_wsw_bit_blt_ret		 = 1;
 	mem_set(t_wsw_bitmap_pixels, 0, sizeof(t_wsw_bitmap_pixels));
-	t_display_native_ret	 = 0;
-	t_display_native_type	 = DISPLAY_NATIVE_WINDOWS;
-	t_display_native_display = (void *)0x5555;
-	t_window_native_ret	 = 0;
-	t_window_native_type	 = DISPLAY_NATIVE_WINDOWS;
-	t_window_native_window	 = (void *)0x6666;
-	t_proc			 = (proc_t){0};
-	t_display		 = (display_t){0};
-	t_gfx			 = (gfx_t){0};
-	t_window		 = (window_t){0};
+	t_wsw_create_dib_section_null_bits = 0;
+	t_alloc_calls			   = 0;
+	t_alloc_fail_at			   = 0;
+	t_display_native_ret		   = 0;
+	t_display_native_type		   = DISPLAY_NATIVE_WINDOWS;
+	t_display_native_display	   = (void *)0x5555;
+	t_window_native_ret		   = 0;
+	t_window_native_type		   = DISPLAY_NATIVE_WINDOWS;
+	t_window_native_window		   = (void *)0x6666;
+	t_proc				   = (proc_t){0};
+	t_display			   = (display_t){0};
+	t_gfx				   = (gfx_t){0};
+	t_window			   = (window_t){0};
 }
 
 static void t_surface_wsw_symbols(proc_t *proc)
@@ -249,8 +271,7 @@ static void t_surface_wsw_symbols(proc_t *proc)
 	proc_setdlsym(
 		proc, STRV("gdi32.dll"), STRV("CreateCompatibleDC"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_CreateCompatibleDC));
 	proc_setdlsym(proc, STRV("gdi32.dll"), STRV("DeleteDC"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_DeleteDC));
-	proc_setdlsym(
-		proc, STRV("gdi32.dll"), STRV("CreateDIBSection"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_CreateDIBSection));
+	proc_setdlsym(proc, STRV("gdi32.dll"), STRV("CreateDIBSection"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_CreateDIBSection));
 	proc_setdlsym(proc, STRV("gdi32.dll"), STRV("SelectObject"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_SelectObject));
 	proc_setdlsym(proc, STRV("gdi32.dll"), STRV("DeleteObject"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_DeleteObject));
 	proc_setdlsym(proc, STRV("gdi32.dll"), STRV("BitBlt"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_BitBlt));
@@ -337,6 +358,198 @@ TEST(surface_wsw_compatible_rejects_invalid_info)
 	END;
 }
 
+TEST(surface_wsw_init_rejects_invalid_arguments)
+{
+	START;
+
+	surface_driver_t *drv = t_surface_wsw_driver();
+	EXPECT_NOT_NULL(drv);
+	EXPECT_EQ(drv->init(NULL, &(surface_config_t){0}), 1);
+	EXPECT_EQ(drv->init(&(surface_t){0}, NULL), 1);
+	EXPECT_EQ(drv->init(&(surface_t){0}, &(surface_config_t){0}), 1);
+
+	END;
+}
+
+TEST(surface_wsw_init_alloc_failure)
+{
+	START;
+
+	t_surface_wsw_reset();
+	t_alloc_fail_at = 1;
+	proc_init(&t_proc, 0, 1, ALLOC_STD);
+	t_surface_wsw_symbols(&t_proc);
+	t_display = (display_t){
+		.drv  = &t_surface_wsw_display_driver,
+		.proc = &t_proc,
+	};
+	t_gfx = (gfx_t){
+		.drv = &t_surface_wsw_gfx_driver,
+	};
+	surface_t surface = {0};
+
+	log_set_quiet(0, 1);
+	EXPECT_NULL(surface_init(&surface,
+				 &(surface_config_t){
+					 .display = &t_display,
+					 .gfx	  = &t_gfx,
+				 },
+				 (alloc_t){.alloc = t_surface_wsw_alloc, .free = alloc_free_std}));
+	log_set_quiet(0, 0);
+
+	proc_free(&t_proc);
+	END;
+}
+
+TEST(surface_wsw_init_rejects_missing_user32_library)
+{
+	START;
+
+	t_surface_wsw_reset();
+	proc_init(&t_proc, 0, 1, ALLOC_STD);
+	t_display = (display_t){
+		.drv  = &t_surface_wsw_display_driver,
+		.proc = &t_proc,
+	};
+	t_gfx = (gfx_t){
+		.drv = &t_surface_wsw_gfx_driver,
+	};
+	surface_t surface = {0};
+
+	log_set_quiet(0, 1);
+	EXPECT_NULL(surface_init(&surface,
+				 &(surface_config_t){
+					 .display = &t_display,
+					 .gfx	  = &t_gfx,
+				 },
+				 ALLOC_STD));
+	log_set_quiet(0, 0);
+
+	proc_free(&t_proc);
+	END;
+}
+
+TEST(surface_wsw_init_rejects_missing_gdi32_library)
+{
+	START;
+
+	t_surface_wsw_reset();
+	proc_init(&t_proc, 0, 1, ALLOC_STD);
+	proc_setdlsym(&t_proc, STRV("user32.dll"), STRV("GetDC"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_GetDC));
+	t_display = (display_t){
+		.drv  = &t_surface_wsw_display_driver,
+		.proc = &t_proc,
+	};
+	t_gfx = (gfx_t){
+		.drv = &t_surface_wsw_gfx_driver,
+	};
+	surface_t surface = {0};
+
+	log_set_quiet(0, 1);
+	EXPECT_NULL(surface_init(&surface,
+				 &(surface_config_t){
+					 .display = &t_display,
+					 .gfx	  = &t_gfx,
+				 },
+				 ALLOC_STD));
+	log_set_quiet(0, 0);
+
+	proc_free(&t_proc);
+	END;
+}
+
+TEST(surface_wsw_init_rejects_missing_symbol)
+{
+	START;
+
+	t_surface_wsw_reset();
+	proc_init(&t_proc, 0, 1, ALLOC_STD);
+	proc_setdlsym(&t_proc, STRV("user32.dll"), STRV("GetDC"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_GetDC));
+	proc_setdlsym(&t_proc, STRV("user32.dll"), STRV("ReleaseDC"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_ReleaseDC));
+	proc_setdlsym(
+		&t_proc, STRV("gdi32.dll"), STRV("CreateCompatibleDC"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_CreateCompatibleDC));
+	t_display = (display_t){
+		.drv  = &t_surface_wsw_display_driver,
+		.proc = &t_proc,
+	};
+	t_gfx = (gfx_t){
+		.drv = &t_surface_wsw_gfx_driver,
+	};
+	surface_t surface = {0};
+
+	log_set_quiet(0, 1);
+	EXPECT_NULL(surface_init(&surface,
+				 &(surface_config_t){
+					 .display = &t_display,
+					 .gfx	  = &t_gfx,
+				 },
+				 ALLOC_STD));
+	log_set_quiet(0, 0);
+
+	proc_free(&t_proc);
+	END;
+}
+
+TEST(surface_wsw_free_rejects_invalid_arguments)
+{
+	START;
+
+	surface_driver_t *drv = t_surface_wsw_driver();
+	EXPECT_NOT_NULL(drv);
+	EXPECT_EQ(drv->free(NULL), 1);
+	EXPECT_EQ(drv->free(&(surface_t){0}), 1);
+
+	END;
+}
+
+TEST(surface_wsw_unbind_rejects_invalid_arguments)
+{
+	START;
+
+	surface_driver_t *drv = t_surface_wsw_driver();
+	EXPECT_NOT_NULL(drv);
+	EXPECT_EQ(drv->unbind(NULL), 1);
+	EXPECT_EQ(drv->unbind(&(surface_t){0}), 1);
+
+	END;
+}
+
+TEST(surface_wsw_config_window_rejects_invalid_arguments)
+{
+	START;
+
+	surface_driver_t *drv = t_surface_wsw_driver();
+	EXPECT_NOT_NULL(drv);
+	EXPECT_EQ(drv->config_window(NULL, &(window_config_t){0}), 1);
+	EXPECT_EQ(drv->config_window(&(surface_t){0}, &(window_config_t){0}), 1);
+
+	t_surface_wsw_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
+	EXPECT_EQ(surface_config_window(&surface, NULL), 1);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_config_window_rejects_missing_native_display)
+{
+	START;
+
+	t_surface_wsw_reset();
+	surface_t surface      = {0};
+	window_config_t config = {0};
+	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
+	t_display_native_ret = 1;
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_config_window(&surface, &config), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
 TEST(surface_wsw_config_window_sets_defaults)
 {
 	START;
@@ -350,6 +563,97 @@ TEST(surface_wsw_config_window_sets_defaults)
 	EXPECT_EQ(config.depth, 0);
 	EXPECT_EQ(config.visual, 0);
 	EXPECT_EQ(config.background, WINDOW_BACKGROUND_NONE);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_bind_rejects_invalid_arguments)
+{
+	START;
+
+	surface_driver_t *drv = t_surface_wsw_driver();
+	EXPECT_NOT_NULL(drv);
+	EXPECT_EQ(drv->bind(NULL, &(window_t){0}), 1);
+	EXPECT_EQ(drv->bind(&(surface_t){0}, &(window_t){0}), 1);
+
+	t_surface_wsw_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, NULL), 1);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_bind_rejects_missing_native_display)
+{
+	START;
+
+	t_surface_wsw_reset();
+	surface_t surface = {0};
+	window_t window	  = {.display = &t_display};
+	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
+	t_display_native_ret = 1;
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_bind_rejects_missing_window_native)
+{
+	START;
+
+	t_surface_wsw_reset();
+	t_window_native_ret = 1;
+	surface_t surface   = {0};
+	window_t window	    = {.display = &t_display};
+	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_bind_get_dc_failure)
+{
+	START;
+
+	t_surface_wsw_reset();
+	t_wsw_get_dc_ret  = NULL;
+	surface_t surface = {0};
+	window_t window	  = {.display = &t_display};
+	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_bind_replaces_existing_window)
+{
+	START;
+
+	t_surface_wsw_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
+	t_wsw_release_dc_calls = 0;
+	t_window_native_window = (void *)0x7777;
+	window_t window	       = {.display = &t_display};
+
+	EXPECT_EQ(surface_bind(&surface, &window), 0);
+	EXPECT_EQ(t_wsw_release_dc_calls, 1);
+	EXPECT_EQ(t_wsw_get_dc_calls, 2);
 
 	t_surface_wsw_close(&surface);
 	END;
@@ -373,6 +677,37 @@ TEST(surface_wsw_bind_success)
 	EXPECT_EQ(native.gfx_surface->api, GFX_API_SOFTWARE);
 	EXPECT_EQ(native.gfx_surface->handle, (u64)(uintptr_t)t_window_native_window);
 	EXPECT_EQ(t_wsw_get_dc_calls, 1);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_native_rejects_invalid_arguments)
+{
+	START;
+
+	t_surface_wsw_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
+	surface_driver_t *drv = t_surface_wsw_driver();
+	EXPECT_NOT_NULL(drv);
+
+	EXPECT_EQ(drv->native(NULL, &(surface_native_t){0}), 1);
+	EXPECT_EQ(drv->native(&surface, NULL), 1);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_native_rejects_unbound_surface)
+{
+	START;
+
+	t_surface_wsw_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
+
+	EXPECT_EQ(surface_native(&surface, &(surface_native_t){0}), 1);
 
 	t_surface_wsw_close(&surface);
 	END;
@@ -418,6 +753,144 @@ TEST(surface_wsw_memory_reuses_matching_bitmap)
 	END;
 }
 
+TEST(surface_wsw_memory_rejects_invalid_arguments)
+{
+	START;
+
+	t_surface_wsw_reset();
+	surface_t surface	= {0};
+	surface_native_t native = {0};
+	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	EXPECT_EQ(native.gfx_surface->ops->memory(NULL, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+	EXPECT_EQ(native.gfx_surface->ops->memory(native.gfx_surface, NULL), 1);
+	EXPECT_EQ(native.gfx_surface->ops->memory(native.gfx_surface, &(gfx_surface_memory_t){.width = 0, .height = 2}), 1);
+	EXPECT_EQ(native.gfx_surface->ops->memory(native.gfx_surface, &(gfx_surface_memory_t){.width = 2, .height = 0}), 1);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_memory_rejects_unbound_surface)
+{
+	START;
+
+	t_surface_wsw_reset();
+	surface_t surface	= {0};
+	surface_native_t native = {0};
+	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+	gfx_surface_t gfx_surface = *native.gfx_surface;
+	EXPECT_EQ(surface_unbind(&surface), 0);
+
+	EXPECT_EQ(gfx_surface.ops->memory(&gfx_surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_memory_pixels_alloc_failure)
+{
+	START;
+
+	t_surface_wsw_reset();
+	t_alloc_fail_at = 2;
+	proc_init(&t_proc, 0, 1, ALLOC_STD);
+	t_surface_wsw_symbols(&t_proc);
+	t_display	  = (display_t){.drv = &t_surface_wsw_display_driver, .proc = &t_proc};
+	t_gfx		  = (gfx_t){.drv = &t_surface_wsw_gfx_driver};
+	surface_t surface = {0};
+	EXPECT_PTR(surface_init(&surface,
+				&(surface_config_t){
+					.display = &t_display,
+					.gfx	 = &t_gfx,
+				},
+				(alloc_t){.alloc = t_surface_wsw_alloc, .free = alloc_free_std}),
+		   &surface);
+	t_window = (window_t){.display = &t_display};
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(t_surface_wsw_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_memory_create_dc_failure)
+{
+	START;
+
+	t_surface_wsw_reset();
+	t_wsw_create_compatible_dc_ret = NULL;
+	surface_t surface	       = {0};
+	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(t_surface_wsw_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+	log_set_quiet(0, 0);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_memory_create_dib_section_failure)
+{
+	START;
+
+	t_surface_wsw_reset();
+	t_wsw_create_dib_section_ret = NULL;
+	surface_t surface	     = {0};
+	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(t_surface_wsw_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+	log_set_quiet(0, 0);
+	EXPECT_EQ(t_wsw_delete_dc_calls, 1);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_memory_create_dib_section_null_bits)
+{
+	START;
+
+	t_surface_wsw_reset();
+	t_wsw_create_dib_section_null_bits = 1;
+	surface_t surface		   = {0};
+	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(t_surface_wsw_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+	log_set_quiet(0, 0);
+	EXPECT_EQ(t_wsw_delete_dc_calls, 1);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_memory_select_object_failure)
+{
+	START;
+
+	t_surface_wsw_reset();
+	t_wsw_select_object_ret = NULL;
+	surface_t surface	= {0};
+	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(t_surface_wsw_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
+	log_set_quiet(0, 0);
+	EXPECT_EQ(t_wsw_delete_object_calls, 1);
+	EXPECT_EQ(t_wsw_delete_dc_calls, 1);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
 TEST(surface_wsw_present_converts_rgba_to_bgra)
 {
 	START;
@@ -451,6 +924,41 @@ TEST(surface_wsw_present_converts_rgba_to_bgra)
 	EXPECT_EQ(t_wsw_bitmap_pixels[5], 0x66);
 	EXPECT_EQ(t_wsw_bitmap_pixels[6], 0x55);
 	EXPECT_EQ(t_wsw_bitmap_pixels[7], 0x88);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_present_rejects_invalid_arguments)
+{
+	START;
+
+	t_surface_wsw_reset();
+	surface_t surface	= {0};
+	surface_native_t native = {0};
+	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	EXPECT_EQ(native.gfx_surface->ops->present(NULL, GFX_PRESENT_MODE_DEFAULT), 1);
+
+	t_surface_wsw_close(&surface);
+	END;
+}
+
+TEST(surface_wsw_present_bit_blt_failure)
+{
+	START;
+
+	t_surface_wsw_reset();
+	t_wsw_bit_blt_ret	    = 0;
+	surface_t surface	    = {0};
+	gfx_surface_memory_t memory = {.width = 2, .height = 2};
+	surface_native_t native	    = {0};
+	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
+	EXPECT_EQ(t_surface_wsw_memory(&surface, &memory), 0);
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 1);
 
 	t_surface_wsw_close(&surface);
 	END;
@@ -501,11 +1009,36 @@ STEST(surface_wsw)
 	RUN(surface_wsw_driver_is_registered);
 	RUN(surface_wsw_compatible_accepts_windows_software);
 	RUN(surface_wsw_compatible_rejects_invalid_info);
+	RUN(surface_wsw_init_rejects_invalid_arguments);
+	RUN(surface_wsw_init_alloc_failure);
+	RUN(surface_wsw_init_rejects_missing_user32_library);
+	RUN(surface_wsw_init_rejects_missing_gdi32_library);
+	RUN(surface_wsw_init_rejects_missing_symbol);
+	RUN(surface_wsw_free_rejects_invalid_arguments);
+	RUN(surface_wsw_unbind_rejects_invalid_arguments);
+	RUN(surface_wsw_config_window_rejects_invalid_arguments);
+	RUN(surface_wsw_config_window_rejects_missing_native_display);
 	RUN(surface_wsw_config_window_sets_defaults);
+	RUN(surface_wsw_bind_rejects_invalid_arguments);
+	RUN(surface_wsw_bind_rejects_missing_native_display);
+	RUN(surface_wsw_bind_rejects_missing_window_native);
+	RUN(surface_wsw_bind_get_dc_failure);
+	RUN(surface_wsw_bind_replaces_existing_window);
 	RUN(surface_wsw_bind_success);
+	RUN(surface_wsw_native_rejects_invalid_arguments);
+	RUN(surface_wsw_native_rejects_unbound_surface);
 	RUN(surface_wsw_memory_allocates_rgba_pixels);
 	RUN(surface_wsw_memory_reuses_matching_bitmap);
+	RUN(surface_wsw_memory_rejects_invalid_arguments);
+	RUN(surface_wsw_memory_rejects_unbound_surface);
+	RUN(surface_wsw_memory_pixels_alloc_failure);
+	RUN(surface_wsw_memory_create_dc_failure);
+	RUN(surface_wsw_memory_create_dib_section_failure);
+	RUN(surface_wsw_memory_create_dib_section_null_bits);
+	RUN(surface_wsw_memory_select_object_failure);
 	RUN(surface_wsw_present_converts_rgba_to_bgra);
+	RUN(surface_wsw_present_rejects_invalid_arguments);
+	RUN(surface_wsw_present_bit_blt_failure);
 	RUN(surface_wsw_unbind_releases_gdi_objects);
 	RUN(surface_wsw_present_rejects_unprepared_surface);
 
