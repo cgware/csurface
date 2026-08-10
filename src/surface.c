@@ -176,6 +176,7 @@ int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *con
 					   &(surface_config_t){
 						   .display = config->display,
 						   .gfx_api = config->driver->api,
+						   .surface = config->surface,
 					   },
 					   alloc) == NULL;
 	}
@@ -194,6 +195,7 @@ int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *con
 				&(surface_config_t){
 					.display = config->display,
 					.gfx	 = gfx,
+					.surface = config->surface,
 				},
 				alloc) == NULL) {
 		gfx_free(gfx);

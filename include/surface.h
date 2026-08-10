@@ -31,11 +31,13 @@ typedef struct surface_config_s {
 	display_t *display;
 	gfx_t *gfx;
 	gfx_api_t gfx_api;
+	gfx_surface_config_t surface;
 } surface_config_t;
 
 typedef struct surface_gfx_config_s {
 	display_t *display;
 	const struct gfx_driver_s *driver;
+	gfx_surface_config_t surface;
 } surface_gfx_config_t;
 
 typedef struct surface_s {

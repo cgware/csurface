@@ -1,34 +1,71 @@
+#include "cmath.h"
 #include "ctime.h"
 #include "display_driver.h"
 #include "gfx_driver.h"
 #include "log.h"
+#include "mem.h"
 #include "print.h"
 #include "surface.h"
 
 enum {
-	EXAMPLE_MAX_TARGETS  = 8,
-	EXAMPLE_MAX_DISPLAYS = 8,
-	EXAMPLE_FPS_INTERVAL = 1000,
-	EXAMPLE_TITLE_SIZE   = 128,
+	EXAMPLE_MAX_TARGETS		= 8,
+	EXAMPLE_MAX_DISPLAYS		= 8,
+	EXAMPLE_FPS_INTERVAL		= 1000,
+	EXAMPLE_SOFTWARE_FRAME_INTERVAL = 1000,
+	EXAMPLE_TITLE_SIZE		= 128,
+	EXAMPLE_RECT_INDEX_COUNT	= 6,
+	EXAMPLE_CUBE_INDEX_COUNT	= 36,
 };
+
+enum {
+	EXAMPLE_CAMERA_MOVE_SPEED	 = 3,
+	EXAMPLE_CAMERA_MOUSE_SENSITIVITY = 3,
+};
+
+typedef struct example_transform_s {
+	mat4f_t model;
+	mat4f_t view;
+	mat4f_t projection;
+} example_transform_t;
+
+typedef struct example_camera_s {
+	vec3f_t position;
+	float yaw;
+	float pitch;
+	int forward;
+	int back;
+	int left;
+	int right;
+	int up;
+	int down;
+	int cursor_centered;
+	u64 frame_time;
+} example_camera_t;
 
 typedef struct example_target_s {
 	gfx_driver_t *driver;
 	gfx_t gfx;
 	gfx_buffer_t vb;
-	gfx_buffer_t ib;
+	gfx_buffer_t rect_ib;
+	gfx_buffer_t cube_ib;
+	gfx_buffer_t gui_ub;
+	gfx_buffer_t world_ub;
 	gfx_shader_t vs;
 	gfx_shader_t fs;
 	gfx_render_pass_t render_pass;
 	gfx_framebuffer_t framebuffer;
 	gfx_pipeline_t pipeline;
 	gfx_swapchain_t swapchain;
-	gfx_target_t gfx_target;
+	gfx_image_t swapchain_images[8];
+	gfx_image_t *frame_image;
 	surface_t surface;
 	window_t window;
+	example_transform_t transform;
+	example_camera_t camera;
 	u32 id;
 	u16 width;
 	u16 height;
+	u64 draw_time;
 	u64 fps_time;
 	u32 fps_frames;
 	u32 fps;
@@ -36,6 +73,16 @@ typedef struct example_target_s {
 	int open;
 	int initialized;
 } example_target_t;
+
+typedef struct example_vertex_s {
+	float x;
+	float y;
+	float z;
+	float r;
+	float g;
+	float b;
+	float a;
+} example_vertex_t;
 
 typedef struct example_state_s {
 	example_target_t *targets;
@@ -47,13 +94,135 @@ typedef struct example_state_s {
 	int failed;
 } example_state_t;
 
-static int draw(example_target_t *target)
+static int example_target_set_cursor_centered(example_target_t *target, int centered);
+
+static void example_camera_init(example_camera_t *camera)
+{
+	if (camera == NULL) {
+		return;
+	}
+	*camera = (example_camera_t){
+		.position = {0.0f, 0.0f, 5.0f},
+	};
+}
+
+static int example_camera_moving(const example_camera_t *camera)
+{
+	return camera != NULL && (camera->forward || camera->back || camera->left || camera->right || camera->up || camera->down);
+}
+
+static void example_camera_basis(const example_camera_t *camera, vec3f_t *forward, vec3f_t *right, vec3f_t *up)
+{
+	float cy = float_cos(camera->yaw);
+	float sy = float_sin(camera->yaw);
+	float cp = float_cos(camera->pitch);
+	float sp = float_sin(camera->pitch);
+
+	vec3f_t f = vec3f(sy * cp, sp, -cy * cp);
+	vec3f_t r = vec3f(cy, 0.0f, sy);
+	vec3f_t u = vec3f_cross(r, f);
+	if (forward != NULL) {
+		*forward = f;
+	}
+	if (right != NULL) {
+		*right = r;
+	}
+	if (up != NULL) {
+		*up = u;
+	}
+}
+
+static mat4f_t example_camera_view(const example_camera_t *camera)
+{
+	vec3f_t forward = {0};
+	example_camera_basis(camera, &forward, NULL, NULL);
+	return mat4f_look_to(camera->position, forward, vec3f(0.0f, 1.0f, 0.0f));
+}
+
+static mat4f_t example_projection(u16 width, u16 height)
+{
+	float aspect = height != 0 ? (float)width / (float)height : 1.0f;
+	return mat4f_frustum(-aspect, aspect, -1.0f, 1.0f, 1.0f, 100.0f);
+}
+
+static example_transform_t example_gui_transform(void)
+{
+	return (example_transform_t){
+		.model	    = mat4f_identity(),
+		.view	    = mat4f_identity(),
+		.projection = mat4f_identity(),
+	};
+}
+
+static int update_target_camera(example_target_t *target, u64 now)
+{
+	if (target == NULL) {
+		return 1;
+	}
+	if (target->camera.frame_time == 0) {
+		target->camera.frame_time = now;
+	}
+	u64 elapsed		  = now - target->camera.frame_time;
+	target->camera.frame_time = now;
+	if (elapsed > 100) {
+		elapsed = 100;
+	}
+
+	if (elapsed > 0 && example_camera_moving(&target->camera)) {
+		float dt	= (float)elapsed * 0.001f;
+		float distance	= (float)EXAMPLE_CAMERA_MOVE_SPEED * dt;
+		vec3f_t forward = {0};
+		vec3f_t right	= {0};
+		example_camera_basis(&target->camera, &forward, &right, NULL);
+		vec3f_t move = {0};
+		if (target->camera.forward) {
+			move = vec3f_add(move, forward);
+		}
+		if (target->camera.back) {
+			move = vec3f_sub(move, forward);
+		}
+		if (target->camera.right) {
+			move = vec3f_add(move, right);
+		}
+		if (target->camera.left) {
+			move = vec3f_sub(move, right);
+		}
+		if (target->camera.up) {
+			move.y += 1.0f;
+		}
+		if (target->camera.down) {
+			move.y -= 1.0f;
+		}
+		float len2 = vec3f_len2(move);
+		if (len2 > 0.0f) {
+			float scale		= distance / float_sqrt(len2);
+			target->camera.position = vec3f_add(target->camera.position, vec3f_scale(move, scale));
+			target->redraw		= 1;
+		}
+	}
+
+	target->transform.view	     = example_camera_view(&target->camera);
+	target->transform.projection = example_projection(target->width, target->height);
+	return 0;
+}
+
+static int draw(example_target_t *target, u64 now)
 {
 	if (target == NULL) {
 		return 1;
 	}
 
-	gfx_frame_t frame = {0};
+	if (update_target_camera(target, now)) {
+		log_error("csurface_example", "draw", NULL, "failed to update camera transform");
+		return 1;
+	}
+
+	gfx_frame_t frame	    = {0};
+	gfx_swapchain_image_t image = {0};
+	if (gfx_swapchain_acquire(&target->swapchain, &image)) {
+		log_error("csurface_example", "draw", NULL, "failed to acquire swapchain image");
+		return 1;
+	}
 
 	gfx_pass_config_t pass_config = {
 		.clear	  = {0.1f, 0.2f, 0.3f, 1.0f},
@@ -73,13 +242,32 @@ static int draw(example_target_t *target)
 		gfx_end(&frame);
 		return 1;
 	}
-	if (gfx_buffer_bind(&frame, &target->ib)) {
-		log_error("csurface_example", "draw", NULL, "failed to bind index buffer");
+	const gfx_resource_binding_t gui_resources[] = {
+		{.binding = 0, .type = GFX_RESOURCE_UNIFORM_BUFFER, .buffer = &target->gui_ub},
+	};
+	if (gfx_bind_resources(&frame, gui_resources, (u32)(sizeof(gui_resources) / sizeof(gui_resources[0]))) ||
+	    gfx_buffer_bind(&frame, &target->rect_ib)) {
+		log_error("csurface_example", "draw", NULL, "failed to bind rectangle draw state");
 		gfx_end(&frame);
 		return 1;
 	}
-	if (gfx_draw_indexed(&frame, 6)) {
-		log_error("csurface_example", "draw", NULL, "failed to draw triangle");
+	if (gfx_draw_indexed(&frame, EXAMPLE_RECT_INDEX_COUNT)) {
+		log_error("csurface_example", "draw", NULL, "failed to draw rectangle");
+		gfx_end(&frame);
+		return 1;
+	}
+	const gfx_resource_binding_t world_resources[] = {
+		{.binding = 0, .type = GFX_RESOURCE_UNIFORM_BUFFER, .buffer = &target->world_ub},
+	};
+	if (gfx_buffer_set_data(&target->world_ub, &target->transform, sizeof(target->transform)) ||
+	    gfx_bind_resources(&frame, world_resources, (u32)(sizeof(world_resources) / sizeof(world_resources[0]))) ||
+	    gfx_buffer_bind(&frame, &target->cube_ib)) {
+		log_error("csurface_example", "draw", NULL, "failed to bind cube draw state");
+		gfx_end(&frame);
+		return 1;
+	}
+	if (gfx_draw_indexed(&frame, EXAMPLE_CUBE_INDEX_COUNT)) {
+		log_error("csurface_example", "draw", NULL, "failed to draw cube");
 		gfx_end(&frame);
 		return 1;
 	}
@@ -87,7 +275,7 @@ static int draw(example_target_t *target)
 		log_error("csurface_example", "draw", NULL, "failed to end");
 		return 1;
 	}
-	if (gfx_swapchain_present(&target->swapchain)) {
+	if (gfx_swapchain_present(&target->swapchain, &image)) {
 		log_error("csurface_example", "draw", NULL, "failed to present frame");
 		return 1;
 	}
@@ -173,14 +361,22 @@ static int draw_all(example_target_t *targets, u32 count)
 		if (!targets[i].open) {
 			continue;
 		}
+		if (example_camera_moving(&targets[i].camera)) {
+			targets[i].redraw = 1;
+		}
 		if (targets[i].driver->api == GFX_API_SOFTWARE && !targets[i].redraw) {
 			continue;
 		}
-		if (draw(&targets[i])) {
+		if (targets[i].driver->api == GFX_API_SOFTWARE && targets[i].draw_time != 0 &&
+		    now - targets[i].draw_time < EXAMPLE_SOFTWARE_FRAME_INTERVAL) {
+			continue;
+		}
+		if (draw(&targets[i], now)) {
 			log_error("csurface_example", "draw", NULL, "failed to draw with graphics driver: %s", targets[i].driver->name);
 			return 1;
 		}
-		targets[i].redraw = 0;
+		targets[i].draw_time = now;
+		targets[i].redraw    = 0;
 		if (update_target_fps(&targets[i], now)) {
 			log_error("csurface_example",
 				  "draw",
@@ -216,19 +412,22 @@ static int set_target_size(example_target_t *target, u16 width, u16 height)
 		return 1;
 	}
 	gfx_swapchain_config_t swapchain_config = {
-		.format	      = GFX_FORMAT_RGBA8,
-		.surface      = native.gfx_surface,
-		.width	      = width,
-		.height	      = height,
-		.present_mode = GFX_PRESENT_MODE_IMMEDIATE,
+		.format		 = GFX_FORMAT_RGBA8,
+		.surface	 = native.gfx_surface,
+		.width		 = width,
+		.height		 = height,
+		.present_mode	 = GFX_PRESENT_MODE_IMMEDIATE,
+		.images		 = target->swapchain_images,
+		.min_image_count = 2,
+		.image_capacity	 = sizeof(target->swapchain_images) / sizeof(target->swapchain_images[0]),
 	};
-	if (gfx_swapchain_init(&target->swapchain, &target->gfx, &swapchain_config) == NULL ||
-	    gfx_target_init_swapchain(&target->gfx_target, &target->swapchain) == NULL) {
+	if (gfx_swapchain_init(&target->swapchain, &target->gfx, &swapchain_config) == NULL) {
 		gfx_swapchain_free(&target->swapchain);
 		return 1;
 	}
-	target->width  = width;
-	target->height = height;
+	target->frame_image = &target->swapchain.images[0];
+	target->width	    = width;
+	target->height	    = height;
 	return 0;
 }
 
@@ -238,25 +437,29 @@ static void clear_target_graphics(example_target_t *target)
 		return;
 	}
 
-	gfx_buffer_free(&target->ib);
+	gfx_buffer_free(&target->cube_ib);
+	gfx_buffer_free(&target->rect_ib);
 	gfx_buffer_free(&target->vb);
+	gfx_buffer_free(&target->world_ub);
+	gfx_buffer_free(&target->gui_ub);
 	gfx_shader_free(&target->vs);
 	gfx_shader_free(&target->fs);
 	gfx_pipeline_free(&target->pipeline);
 	gfx_framebuffer_free(&target->framebuffer);
-	gfx_target_free(&target->gfx_target);
 	gfx_swapchain_free(&target->swapchain);
+	target->frame_image = NULL;
 	gfx_render_pass_free(&target->render_pass);
 	surface_free(&target->surface);
 	gfx_free(&target->gfx);
 	target->driver = NULL;
 }
 
-static surface_gfx_config_t target_graphics_config(display_t *display, gfx_driver_t *driver)
+static surface_gfx_config_t target_graphics_config(display_t *display, gfx_driver_t *driver, u32 image_count)
 {
 	return (surface_gfx_config_t){
 		.display = display,
 		.driver	 = driver,
+		.surface = {.image_count = image_count},
 	};
 }
 
@@ -266,7 +469,8 @@ static int init_target_graphics(display_t *display, proc_t *proc, gfx_driver_t *
 		return -1;
 	}
 
-	surface_gfx_config_t config = target_graphics_config(display, driver);
+	u32 image_count		    = sizeof(target->swapchain_images) / sizeof(target->swapchain_images[0]);
+	surface_gfx_config_t config = target_graphics_config(display, driver, image_count);
 	if (!surface_gfx_supported(&config)) {
 		return 0;
 	}
@@ -287,6 +491,8 @@ static void destroy_target(example_target_t *target)
 		return;
 	}
 
+	example_target_set_cursor_centered(target, 0);
+	window_set_raw_motion(&target->window, 0);
 	target->open = 0;
 	clear_target_graphics(target);
 	window_free(&target->window);
@@ -327,6 +533,7 @@ static void free_graphics(example_target_t *targets, u32 count)
 
 static int fail_target_init(example_target_t *target)
 {
+	window_set_raw_motion(&target->window, 0);
 	clear_target_graphics(target);
 	window_free(&target->window);
 	return -1;
@@ -338,7 +545,8 @@ static int bind_target_graphics(display_t *display, proc_t *proc, example_target
 		return 1;
 	}
 
-	surface_gfx_config_t config = target_graphics_config(display, target->driver);
+	u32 image_count		    = sizeof(target->swapchain_images) / sizeof(target->swapchain_images[0]);
+	surface_gfx_config_t config = target_graphics_config(display, target->driver, image_count);
 	return surface_gfx_bind(&target->surface, &target->gfx, window, &config, proc, ALLOC_STD);
 }
 
@@ -350,11 +558,19 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 	if (target->vs.data != NULL) {
 		return 0;
 	}
-	gfx_vertex_2d_t vertices[] = {
-		{0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f},
-		{0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f},
-		{-0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f},
-		{-0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 1.0f},
+	example_vertex_t vertices[] = {
+		{-0.95f, 0.95f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f},
+		{-0.65f, 0.95f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+		{-0.65f, 0.65f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f},
+		{-0.95f, 0.65f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f},
+		{-0.5f, -0.5f, -0.5f, 0.9f, 0.2f, 0.2f, 1.0f},
+		{0.5f, -0.5f, -0.5f, 0.2f, 0.9f, 0.2f, 1.0f},
+		{0.5f, 0.5f, -0.5f, 0.2f, 0.2f, 0.9f, 1.0f},
+		{-0.5f, 0.5f, -0.5f, 0.9f, 0.9f, 0.2f, 1.0f},
+		{-0.5f, -0.5f, 0.5f, 0.9f, 0.2f, 0.9f, 1.0f},
+		{0.5f, -0.5f, 0.5f, 0.2f, 0.9f, 0.9f, 1.0f},
+		{0.5f, 0.5f, 0.5f, 0.9f, 0.6f, 0.2f, 1.0f},
+		{-0.5f, 0.5f, 0.5f, 0.6f, 0.2f, 0.9f, 1.0f},
 	};
 	gfx_buffer_config_t vertex_buffer_config = {
 		.type  = GFX_BUFFER_VERTEX,
@@ -366,55 +582,100 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		log_error("csurface_example",
 			  "init",
 			  NULL,
-			  "failed to initialize triangle vertex buffer for driver: %s",
+			  "failed to initialize geometry vertex buffer for driver: %s",
 			  target->driver->name);
 		return 1;
 	}
-	unsigned int indices[] = {0, 1, 3, 1, 2, 3};
-
-	gfx_buffer_config_t index_buffer_config = {
+	unsigned int rect_indices[]		     = {0, 1, 3, 1, 2, 3};
+	gfx_buffer_config_t rect_index_buffer_config = {
 		.type  = GFX_BUFFER_INDEX,
 		.usage = GFX_BUFFER_USAGE_STATIC,
-		.size  = sizeof(indices),
-		.data  = indices,
+		.size  = sizeof(rect_indices),
+		.data  = rect_indices,
 	};
-	if (gfx_buffer_init(&target->ib, &target->gfx, &index_buffer_config) == NULL) {
+	if (gfx_buffer_init(&target->rect_ib, &target->gfx, &rect_index_buffer_config) == NULL) {
 		log_error("csurface_example",
 			  "init",
 			  NULL,
-			  "failed to initialize triangle index buffer for driver: %s",
+			  "failed to initialize rectangle index buffer for driver: %s",
 			  target->driver->name);
 		return 1;
 	}
-	const char *triangle_src = "vs_in 0 VertexIn {\n"
-				   "\tvec2f position : POSITION;\n"
-				   "\tvec4f color : COLOR0;\n"
-				   "}\n"
-				   "vs_out VertexOut {\n"
-				   "\tvec4f position : POSITION;\n"
-				   "\tvec4f color : COLOR0;\n"
-				   "}\n"
-				   "fs_in FragmentIn {\n"
-				   "\tvec4f color : COLOR0;\n"
-				   "}\n"
-				   "fs_out FragmentOut {\n"
-				   "\tvec4f color : COLOR0;\n"
-				   "}\n"
-				   "VertexOut vertex(VertexIn input) {\n"
-				   "\tVertexOut output;\n"
-				   "\toutput.position = vec4f(input.position.x, input.position.y, 0.0f, 1.0f);\n"
-				   "\toutput.color = input.color;\n"
-				   "\treturn output;\n"
-				   "}\n"
-				   "FragmentOut fragment(FragmentIn input) {\n"
-				   "\tFragmentOut output;\n"
-				   "\toutput.color = input.color;\n"
-				   "\treturn output;\n"
-				   "}\n";
+	unsigned int cube_indices[] = {
+		4, 7, 6, 4, 6, 5, 4, 8, 11, 4, 11, 7, 5, 6, 10, 5, 10, 9, 7, 11, 10, 7, 10, 6, 4, 5, 9, 4, 9, 8, 8, 9, 10, 8, 10, 11,
+	};
+	gfx_buffer_config_t cube_index_buffer_config = {
+		.type  = GFX_BUFFER_INDEX,
+		.usage = GFX_BUFFER_USAGE_STATIC,
+		.size  = sizeof(cube_indices),
+		.data  = cube_indices,
+	};
+	if (gfx_buffer_init(&target->cube_ib, &target->gfx, &cube_index_buffer_config) == NULL) {
+		log_error("csurface_example", "init", NULL, "failed to initialize cube index buffer for driver: %s", target->driver->name);
+		return 1;
+	}
+	target->transform = (example_transform_t){
+		.model	    = mat4f_identity(),
+		.view	    = example_camera_view(&target->camera),
+		.projection = example_projection(target->width, target->height),
+	};
+	example_transform_t gui_transform	      = example_gui_transform();
+	gfx_buffer_config_t gui_uniform_buffer_config = {
+		.type  = GFX_BUFFER_UNIFORM,
+		.usage = GFX_BUFFER_USAGE_STATIC,
+		.size  = sizeof(gui_transform),
+		.data  = &gui_transform,
+	};
+	if (gfx_buffer_init(&target->gui_ub, &target->gfx, &gui_uniform_buffer_config) == NULL) {
+		log_error("csurface_example", "init", NULL, "failed to initialize GUI uniform buffer for driver: %s", target->driver->name);
+		return 1;
+	}
+	gfx_buffer_config_t world_uniform_buffer_config = {
+		.type  = GFX_BUFFER_UNIFORM,
+		.usage = GFX_BUFFER_USAGE_DYNAMIC,
+		.size  = sizeof(target->transform),
+		.data  = &target->transform,
+	};
+	if (gfx_buffer_init(&target->world_ub, &target->gfx, &world_uniform_buffer_config) == NULL) {
+		log_error(
+			"csurface_example", "init", NULL, "failed to initialize world uniform buffer for driver: %s", target->driver->name);
+		return 1;
+	}
+	const char *shader_src =
+		"vs_in 0 VertexIn {\n"
+		"\tvec3f position : POSITION;\n"
+		"\tvec4f color : COLOR0;\n"
+		"}\n"
+		"vs_out VertexOut {\n"
+		"\tvec4f position : POSITION;\n"
+		"\tvec4f color : COLOR0;\n"
+		"}\n"
+		"fs_in FragmentIn {\n"
+		"\tvec4f color : COLOR0;\n"
+		"}\n"
+		"fs_out FragmentOut {\n"
+		"\tvec4f color : COLOR0;\n"
+		"}\n"
+		"buffer 0 Transform {\n"
+		"\tmat4f model;\n"
+		"\tmat4f view;\n"
+		"\tmat4f projection;\n"
+		"}\n"
+		"VertexOut vertex(VertexIn input) {\n"
+		"\tVertexOut output;\n"
+		"\toutput.position = projection * view * model * vec4f(input.position.x, input.position.y, input.position.z, 1.0f);\n"
+		"\toutput.color = input.color;\n"
+		"\treturn output;\n"
+		"}\n"
+		"FragmentOut fragment(FragmentIn input) {\n"
+		"\tFragmentOut output;\n"
+		"\toutput.color = input.color;\n"
+		"\treturn output;\n"
+		"}\n";
 
 	gfx_shader_config_t vs_config = {
 		.compiler = compiler,
-		.source	  = strv_cstr(triangle_src),
+		.source	  = strv_cstr(shader_src),
 		.stage	  = GFX_SHADER_STAGE_VERTEX,
 	};
 
@@ -422,40 +683,40 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		log_error("csurface_example",
 			  "init",
 			  NULL,
-			  "failed to initialize triangle vertex shader for driver: %s",
+			  "failed to initialize geometry vertex shader for driver: %s",
 			  target->driver->name);
 		return 1;
 	}
 
 	gfx_shader_config_t fs_config = {
 		.compiler = compiler,
-		.source	  = strv_cstr(triangle_src),
+		.source	  = strv_cstr(shader_src),
 		.stage	  = GFX_SHADER_STAGE_FRAGMENT,
 	};
 	if (gfx_shader_init(&target->fs, &target->gfx, &fs_config) == NULL) {
 		log_error("csurface_example",
 			  "init",
 			  NULL,
-			  "failed to initialize triangle fragment shader for driver: %s",
+			  "failed to initialize geometry fragment shader for driver: %s",
 			  target->driver->name);
 		return 1;
 	}
 
 	static const gfx_layout_t input_layout[] = {
-		{.index = 0, .semantic = "POSITION", .count = 2, .type = GFX_VALUE_FLOAT32},
+		{.index = 0, .semantic = "POSITION", .count = 3, .type = GFX_VALUE_FLOAT32},
 		{.index = 1, .semantic = "COLOR", .count = 4, .type = GFX_VALUE_FLOAT32},
 	};
 	if (gfx_render_pass_init(&target->render_pass,
 				 &target->gfx,
 				 &(gfx_render_pass_config_t){
-					 .color_format = target->gfx_target.format,
+					 .color_format = target->frame_image->format,
 					 .load	       = GFX_LOAD_CLEAR,
 					 .store	       = GFX_STORE_STORE,
 				 }) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize render pass for driver: %s", target->driver->name);
 		return 1;
 	}
-	if (gfx_framebuffer_init(&target->framebuffer, &target->gfx_target, &target->render_pass) == NULL) {
+	if (gfx_framebuffer_init(&target->framebuffer, target->frame_image, &target->render_pass) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize framebuffer for driver: %s", target->driver->name);
 		return 1;
 	}
@@ -491,8 +752,10 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 		return 0;
 	}
 
-	example_target_t next = {.width = target->width, .height = target->height};
-	int initialized	      = init_target_graphics(state->display, state->proc, driver, &next);
+	example_target_t next = {
+		.width = target->width, .height = target->height, .camera = target->camera, .transform = target->transform};
+	next.camera.frame_time = 0;
+	int initialized	       = init_target_graphics(state->display, state->proc, driver, &next);
 	if (initialized <= 0) {
 		return initialized;
 	}
@@ -506,13 +769,15 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 		return 0;
 	}
 
-	gfx_buffer_free(&target->ib);
+	gfx_buffer_free(&target->world_ub);
+	gfx_buffer_free(&target->gui_ub);
+	gfx_buffer_free(&target->cube_ib);
+	gfx_buffer_free(&target->rect_ib);
 	gfx_buffer_free(&target->vb);
 	gfx_shader_free(&target->vs);
 	gfx_shader_free(&target->fs);
 	gfx_pipeline_free(&target->pipeline);
 	gfx_framebuffer_free(&target->framebuffer);
-	gfx_target_free(&target->gfx_target);
 	if (surface_unbind(&target->surface)) {
 		clear_target_graphics(&next);
 		return -1;
@@ -527,66 +792,92 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	}
 
 	gfx_t old_gfx			  = target->gfx;
-	gfx_buffer_t old_ib		  = target->ib;
+	gfx_buffer_t old_rect_ib	  = target->rect_ib;
+	gfx_buffer_t old_cube_ib	  = target->cube_ib;
 	gfx_buffer_t old_vb		  = target->vb;
+	gfx_buffer_t old_gui_ub		  = target->gui_ub;
+	gfx_buffer_t old_world_ub	  = target->world_ub;
 	gfx_shader_t old_vs		  = target->vs;
 	gfx_shader_t old_fs		  = target->fs;
 	gfx_render_pass_t old_render_pass = target->render_pass;
 	gfx_framebuffer_t old_framebuffer = target->framebuffer;
 	gfx_pipeline_t old_pipeline	  = target->pipeline;
 	gfx_swapchain_t old_swapchain	  = target->swapchain;
-	gfx_target_t old_target		  = target->gfx_target;
-	old_ib.gfx			  = &old_gfx;
-	old_vb.gfx			  = &old_gfx;
-	old_vs.gfx			  = &old_gfx;
-	old_fs.gfx			  = &old_gfx;
-	old_render_pass.gfx		  = &old_gfx;
-	old_framebuffer.gfx		  = &old_gfx;
-	old_framebuffer.target		  = &old_target;
-	old_framebuffer.render_pass	  = &old_render_pass;
-	old_pipeline.gfx		  = &old_gfx;
-	old_pipeline.render_pass	  = &old_render_pass;
-	old_swapchain.gfx		  = &old_gfx;
-	old_target.gfx			  = &old_gfx;
-	old_target.swapchain		  = &old_swapchain;
-	surface_t old_surface		  = target->surface;
-	old_surface.config.gfx		  = &old_gfx;
-	next.surface.config.gfx		  = &next.gfx;
-	target->gfx			  = next.gfx;
-	target->ib			  = next.ib;
-	target->vb			  = next.vb;
-	target->vs			  = next.vs;
-	target->fs			  = next.fs;
-	target->render_pass		  = next.render_pass;
-	target->framebuffer		  = next.framebuffer;
-	target->pipeline		  = next.pipeline;
-	target->swapchain		  = next.swapchain;
-	target->ib.gfx			  = &target->gfx;
-	target->vb.gfx			  = &target->gfx;
-	target->vs.gfx			  = &target->gfx;
-	target->fs.gfx			  = &target->gfx;
-	target->render_pass.gfx		  = &target->gfx;
-	target->framebuffer.gfx		  = &target->gfx;
-	target->framebuffer.target	  = &target->gfx_target;
-	target->framebuffer.render_pass	  = &target->render_pass;
-	target->pipeline.gfx		  = &target->gfx;
-	target->pipeline.render_pass	  = &target->render_pass;
-	target->swapchain.gfx		  = &target->gfx;
-	if (gfx_target_move(&target->gfx_target, &next.gfx_target, &target->gfx)) {
-		return -1;
+	gfx_image_t old_swapchain_images[8];
+	mem_copy(old_swapchain_images, sizeof(old_swapchain_images), target->swapchain_images, sizeof(old_swapchain_images));
+	old_rect_ib.gfx		    = &old_gfx;
+	old_cube_ib.gfx		    = &old_gfx;
+	old_vb.gfx		    = &old_gfx;
+	old_gui_ub.gfx		    = &old_gfx;
+	old_world_ub.gfx	    = &old_gfx;
+	old_vs.gfx		    = &old_gfx;
+	old_fs.gfx		    = &old_gfx;
+	old_render_pass.gfx	    = &old_gfx;
+	old_framebuffer.gfx	    = &old_gfx;
+	old_framebuffer.image	    = &old_swapchain_images[0];
+	old_framebuffer.render_pass = &old_render_pass;
+	old_pipeline.gfx	    = &old_gfx;
+	old_pipeline.render_pass    = &old_render_pass;
+	old_swapchain.gfx	    = &old_gfx;
+	old_swapchain.images	    = old_swapchain_images;
+	for (u32 i = 0; i < old_swapchain.image_capacity && i < sizeof(old_swapchain_images) / sizeof(old_swapchain_images[0]); i++) {
+		old_swapchain_images[i].gfx = &old_gfx;
+		if (old_swapchain_images[i].swapchain == &target->swapchain) {
+			old_swapchain_images[i].swapchain = &old_swapchain;
+		}
 	}
-	target->gfx_target.swapchain = &target->swapchain;
-	target->surface		     = next.surface;
-	target->surface.config.gfx   = &target->gfx;
-	target->driver		     = driver;
-	target->redraw		     = 1;
-	gfx_buffer_free(&old_ib);
+	surface_t old_surface	= target->surface;
+	old_surface.config.gfx	= &old_gfx;
+	next.surface.config.gfx = &next.gfx;
+	mem_copy(target->swapchain_images, sizeof(target->swapchain_images), next.swapchain_images, sizeof(target->swapchain_images));
+	target->gfx			= next.gfx;
+	target->rect_ib			= next.rect_ib;
+	target->cube_ib			= next.cube_ib;
+	target->vb			= next.vb;
+	target->gui_ub			= next.gui_ub;
+	target->world_ub		= next.world_ub;
+	target->vs			= next.vs;
+	target->fs			= next.fs;
+	target->render_pass		= next.render_pass;
+	target->framebuffer		= next.framebuffer;
+	target->pipeline		= next.pipeline;
+	target->swapchain		= next.swapchain;
+	target->swapchain.images	= target->swapchain_images;
+	target->frame_image		= &target->swapchain.images[0];
+	target->rect_ib.gfx		= &target->gfx;
+	target->cube_ib.gfx		= &target->gfx;
+	target->vb.gfx			= &target->gfx;
+	target->gui_ub.gfx		= &target->gfx;
+	target->world_ub.gfx		= &target->gfx;
+	target->vs.gfx			= &target->gfx;
+	target->fs.gfx			= &target->gfx;
+	target->render_pass.gfx		= &target->gfx;
+	target->framebuffer.gfx		= &target->gfx;
+	target->framebuffer.image	= target->frame_image;
+	target->framebuffer.render_pass = &target->render_pass;
+	target->pipeline.gfx		= &target->gfx;
+	target->pipeline.render_pass	= &target->render_pass;
+	target->swapchain.gfx		= &target->gfx;
+	for (u32 i = 0; i < target->swapchain.image_capacity && i < sizeof(target->swapchain_images) / sizeof(target->swapchain_images[0]);
+	     i++) {
+		target->swapchain_images[i].gfx = &target->gfx;
+		if (target->swapchain_images[i].swapchain == &next.swapchain) {
+			target->swapchain_images[i].swapchain = &target->swapchain;
+		}
+	}
+	target->surface		   = next.surface;
+	target->surface.config.gfx = &target->gfx;
+	target->driver		   = driver;
+	target->redraw		   = 1;
+	gfx_buffer_free(&old_cube_ib);
+	gfx_buffer_free(&old_rect_ib);
 	gfx_buffer_free(&old_vb);
+	gfx_buffer_free(&old_world_ub);
+	gfx_buffer_free(&old_gui_ub);
 	gfx_shader_free(&old_vs);
 	gfx_shader_free(&old_fs);
 	gfx_pipeline_free(&old_pipeline);
 	gfx_framebuffer_free(&old_framebuffer);
-	gfx_target_free(&old_target);
 	gfx_swapchain_free(&old_swapchain);
 	gfx_render_pass_free(&old_render_pass);
 	surface_free(&old_surface);
@@ -626,6 +917,107 @@ static example_target_t *find_target(example_target_t *targets, u32 count, u32 i
 	return NULL;
 }
 
+static int example_camera_key(example_camera_t *camera, display_key_t key, int down)
+{
+	if (camera == NULL) {
+		return 0;
+	}
+	switch (key) {
+	case DISPLAY_KEY_W:
+		camera->forward = down;
+		return 1;
+	case DISPLAY_KEY_S:
+		camera->back = down;
+		return 1;
+	case DISPLAY_KEY_A:
+		camera->left = down;
+		return 1;
+	case DISPLAY_KEY_D:
+		camera->right = down;
+		return 1;
+	case DISPLAY_KEY_SPACE:
+		camera->up = down;
+		return 1;
+	case DISPLAY_KEY_LEFT_SHIFT:
+	case DISPLAY_KEY_RIGHT_SHIFT:
+		camera->down = down;
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+static void example_camera_clear_input(example_camera_t *camera)
+{
+	if (camera == NULL) {
+		return;
+	}
+	camera->forward		= 0;
+	camera->back		= 0;
+	camera->left		= 0;
+	camera->right		= 0;
+	camera->up		= 0;
+	camera->down		= 0;
+	camera->cursor_centered = 0;
+}
+
+static int example_target_set_cursor_centered(example_target_t *target, int centered)
+{
+	if (target == NULL || !target->open) {
+		return 0;
+	}
+
+	int enabled = centered != 0;
+	if (target->camera.cursor_centered == enabled) {
+		return 0;
+	}
+	window_cursor_mode_t mode = enabled ? WINDOW_CURSOR_MODE_CENTERED : WINDOW_CURSOR_MODE_NORMAL;
+	if (enabled) {
+		if (window_set_cursor_mode(&target->window, mode)) {
+			return 1;
+		}
+		if (window_set_cursor_visible(&target->window, 0)) {
+			window_set_cursor_mode(&target->window, WINDOW_CURSOR_MODE_NORMAL);
+			return 1;
+		}
+	} else {
+		int ret = window_set_cursor_visible(&target->window, 1);
+		ret	= window_set_cursor_mode(&target->window, mode) || ret;
+		if (ret) {
+			return 1;
+		}
+	}
+
+	target->camera.cursor_centered = enabled;
+	return 0;
+}
+
+static int example_target_set_raw_motion(example_state_t *state, example_target_t *target)
+{
+	if (state == NULL || target == NULL || !target->open) {
+		return 0;
+	}
+
+	for (u32 i = 0; i < state->count; i++) {
+		example_target_t *other = &state->targets[i];
+		if (other != target && other->open && window_set_raw_motion(&other->window, 0)) {
+			return 1;
+		}
+	}
+
+	return window_set_raw_motion(&target->window, 1);
+}
+
+static void example_camera_mouse_move(example_camera_t *camera, s32 dx, s32 dy)
+{
+	if (camera == NULL) {
+		return;
+	}
+	float sensitivity = (float)EXAMPLE_CAMERA_MOUSE_SENSITIVITY * 0.001f;
+	camera->yaw += (float)dx * sensitivity;
+	camera->pitch = float_clamp(camera->pitch - (float)dy * sensitivity, -1.5f, 1.5f);
+}
+
 static void on_event(display_t *display, const display_event_t *event, void *user)
 {
 	(void)display;
@@ -643,6 +1035,7 @@ static void on_event(display_t *display, const display_event_t *event, void *use
 	switch (event->type) {
 	case DISPLAY_EVENT_CLOSE:
 		if (target->open && state->open > 0) {
+			example_target_set_cursor_centered(target, 0);
 			target->open = 0;
 			state->open--;
 		}
@@ -650,9 +1043,13 @@ static void on_event(display_t *display, const display_event_t *event, void *use
 	case DISPLAY_EVENT_KEY_DOWN:
 		switch (event->key) {
 		case DISPLAY_KEY_ESCAPE:
-			if (target->open && state->open > 0) {
-				target->open = 0;
-				state->open--;
+			if (example_target_set_cursor_centered(target, 0)) {
+				log_error("csurface_example",
+					  "event",
+					  NULL,
+					  "failed to disable centered cursor for graphics driver: %s",
+					  target->driver->name);
+				state->failed = 1;
 			}
 			return;
 		case DISPLAY_KEY_F11:
@@ -695,6 +1092,61 @@ static void on_event(display_t *display, const display_event_t *event, void *use
 		default:
 			break;
 		}
+		if (example_camera_key(&target->camera, event->key, 1)) {
+			target->redraw = 1;
+			return;
+		}
+		break;
+	case DISPLAY_EVENT_KEY_UP:
+		if (example_camera_key(&target->camera, event->key, 0)) {
+			target->redraw = 1;
+			return;
+		}
+		break;
+	case DISPLAY_EVENT_MOUSE_MOVE_RAW:
+		if (!target->open) {
+			return;
+		}
+		if (target->camera.cursor_centered) {
+			example_camera_mouse_move(&target->camera, event->dx, event->dy);
+			target->redraw = 1;
+		}
+		break;
+	case DISPLAY_EVENT_MOUSE_DOWN:
+		if (!target->open) {
+			return;
+		}
+		if (example_target_set_raw_motion(state, target)) {
+			log_warn("csurface_example",
+				 "event",
+				 NULL,
+				 "failed to enable raw motion for graphics driver: %s",
+				 target->driver->name);
+		}
+		if (example_target_set_cursor_centered(target, 1)) {
+			log_error("csurface_example",
+				  "event",
+				  NULL,
+				  "failed to enable centered cursor for graphics driver: %s",
+				  target->driver->name);
+			state->failed = 1;
+			return;
+		}
+		break;
+	case DISPLAY_EVENT_MOUSE_UP:
+		break;
+	case DISPLAY_EVENT_FOCUS_LOST:
+		if (example_target_set_cursor_centered(target, 0)) {
+			log_error("csurface_example",
+				  "event",
+				  NULL,
+				  "failed to disable centered cursor for graphics driver: %s",
+				  target->driver->name);
+			state->failed = 1;
+			return;
+		}
+		example_camera_clear_input(&target->camera);
+		target->redraw = 1;
 		break;
 	case DISPLAY_EVENT_RESIZE:
 		if (!target->open) {
@@ -766,6 +1218,7 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, c
 		log_error("csurface_example", "init", NULL, "failed to set surface target for graphics driver: %s", driver->name);
 		return fail_target_init(target);
 	}
+	example_camera_init(&target->camera);
 	if (init_target_pipeline(target, compiler)) {
 		return fail_target_init(target);
 	}
@@ -780,7 +1233,8 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, c
 static int has_continuous_targets(example_target_t *targets, u32 count)
 {
 	for (u32 i = 0; i < count; i++) {
-		if (targets[i].open && targets[i].driver->api != GFX_API_SOFTWARE) {
+		if (targets[i].open &&
+		    (targets[i].driver->api != GFX_API_SOFTWARE || example_camera_moving(&targets[i].camera) || targets[i].redraw)) {
 			return 1;
 		}
 	}

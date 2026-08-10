@@ -13,12 +13,11 @@ typedef void *IDXGIFactory;
 typedef void *IDXGISwapChain;
 
 enum {
-	S_OK				     = 0,
-	DXGI_FORMAT_R8G8B8A8_UNORM	     = 28,
-	DXGI_USAGE_RENDER_TARGET_OUTPUT	     = 0x00000020,
-	DXGI_SWAP_EFFECT_DISCARD	     = 0,
-	DXGI_SWAP_CHAIN_WINDOWED	     = 1,
-	SURFACE_D3D11_SWAPCHAIN_BUFFER_COUNT = 2,
+	S_OK				= 0,
+	DXGI_FORMAT_R8G8B8A8_UNORM	= 28,
+	DXGI_USAGE_RENDER_TARGET_OUTPUT = 0x00000020,
+	DXGI_SWAP_EFFECT_DISCARD	= 0,
+	DXGI_SWAP_CHAIN_WINDOWED	= 1,
 };
 
 typedef struct GUID_s {
@@ -210,6 +209,10 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 		log_error("csurface", "surface_d3d11", NULL, "Windows native window is unavailable");
 		return 1;
 	}
+	if (srf->config.surface.image_count == 0) {
+		log_error("csurface", "surface_d3d11", NULL, "D3D11 surface requires explicit swapchain image count");
+		return 1;
+	}
 
 	surface_d3d11_t *ctx = srf->data;
 	if (ctx->swapchain != NULL) {
@@ -235,7 +238,7 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 				.Count = 1,
 			},
 		.BufferUsage  = DXGI_USAGE_RENDER_TARGET_OUTPUT,
-		.BufferCount  = SURFACE_D3D11_SWAPCHAIN_BUFFER_COUNT,
+		.BufferCount  = srf->config.surface.image_count,
 		.OutputWindow = native_window.window,
 		.Windowed     = DXGI_SWAP_CHAIN_WINDOWED,
 		.SwapEffect   = DXGI_SWAP_EFFECT_DISCARD,

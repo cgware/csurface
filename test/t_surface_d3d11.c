@@ -60,12 +60,18 @@ typedef struct t_swapchain_s {
 	t_swapchain_vtbl_t *vtbl;
 } t_swapchain_t;
 
+typedef struct t_dxgi_swapchain_desc_s {
+	u8 reserved[40];
+	UINT BufferCount;
+} t_dxgi_swapchain_desc_t;
+
 static int t_create_factory_calls;
 static int t_create_swapchain_calls;
 static int t_present_calls;
 static int t_release_factory_calls;
 static int t_release_swapchain_calls;
 static void *t_create_swapchain_device;
+static UINT t_create_swapchain_buffer_count;
 static int t_display_native_ret;
 static int t_window_native_ret;
 static int t_gfx_native_ret;
@@ -120,10 +126,12 @@ static ULONG t_swapchain_release(IDXGISwapChain *self)
 static HRESULT t_CreateSwapChain(IDXGIFactory *self, void *device, void *desc, IDXGISwapChain **swapchain)
 {
 	(void)self;
-	(void)desc;
 	t_create_swapchain_calls++;
 	t_create_swapchain_device = device;
-	*swapchain		  = t_create_swapchain_null ? NULL : (IDXGISwapChain *)&t_swapchain;
+	if (desc != NULL) {
+		t_create_swapchain_buffer_count = ((const t_dxgi_swapchain_desc_t *)desc)->BufferCount;
+	}
+	*swapchain = t_create_swapchain_null ? NULL : (IDXGISwapChain *)&t_swapchain;
 	return t_create_swapchain_ret;
 }
 
@@ -198,28 +206,29 @@ static gfx_driver_t t_gfx_driver = {
 
 static void t_surface_d3d11_reset(void)
 {
-	t_create_factory_calls	  = 0;
-	t_create_swapchain_calls  = 0;
-	t_present_calls		  = 0;
-	t_release_factory_calls	  = 0;
-	t_release_swapchain_calls = 0;
-	t_create_swapchain_device = NULL;
-	t_display_native_ret	  = 0;
-	t_window_native_ret	  = 0;
-	t_gfx_native_ret	  = 0;
-	t_display_native_type	  = DISPLAY_NATIVE_WINDOWS;
-	t_window_native_type	  = DISPLAY_NATIVE_WINDOWS;
-	t_window_native_window	  = (HWND)0x5678;
-	t_gfx_native_api	  = GFX_API_D3D11;
-	t_gfx_native_device	  = 0x9876;
-	t_create_factory_ret	  = S_OK;
-	t_create_factory_null	  = 0;
-	t_create_swapchain_ret	  = S_OK;
-	t_create_swapchain_null	  = 0;
-	t_present_ret		  = S_OK;
-	t_factory.vtbl		  = &t_factory_vtbl;
-	t_swapchain.vtbl	  = &t_swapchain_vtbl;
-	t_proc			  = (proc_t){0};
+	t_create_factory_calls		= 0;
+	t_create_swapchain_calls	= 0;
+	t_present_calls			= 0;
+	t_release_factory_calls		= 0;
+	t_release_swapchain_calls	= 0;
+	t_create_swapchain_device	= NULL;
+	t_create_swapchain_buffer_count = 0;
+	t_display_native_ret		= 0;
+	t_window_native_ret		= 0;
+	t_gfx_native_ret		= 0;
+	t_display_native_type		= DISPLAY_NATIVE_WINDOWS;
+	t_window_native_type		= DISPLAY_NATIVE_WINDOWS;
+	t_window_native_window		= (HWND)0x5678;
+	t_gfx_native_api		= GFX_API_D3D11;
+	t_gfx_native_device		= 0x9876;
+	t_create_factory_ret		= S_OK;
+	t_create_factory_null		= 0;
+	t_create_swapchain_ret		= S_OK;
+	t_create_swapchain_null		= 0;
+	t_present_ret			= S_OK;
+	t_factory.vtbl			= &t_factory_vtbl;
+	t_swapchain.vtbl		= &t_swapchain_vtbl;
+	t_proc				= (proc_t){0};
 	proc_init(&t_proc, 0, 1, ALLOC_STD);
 	proc_setdlsym(&t_proc,
 		      STRV("dxgi.dll"),
@@ -263,6 +272,7 @@ static int t_surface_d3d11_init_surface(surface_t *surface)
 	surface_config_t config = {
 		.display = &t_display,
 		.gfx	 = &t_gfx,
+		.surface = {.image_count = 3},
 	};
 
 	return surface_init(surface, &config, ALLOC_STD) != surface;
@@ -515,6 +525,26 @@ TEST(surface_d3d11_bind_rejects_null_window_handle)
 	END;
 }
 
+TEST(surface_d3d11_bind_requires_image_count)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	surface.config.surface.image_count = 0;
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 1);
+	log_set_quiet(0, 0);
+	EXPECT_EQ(t_create_factory_calls, 0);
+	EXPECT_EQ(t_create_swapchain_calls, 0);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
 TEST(surface_d3d11_bind_missing_library)
 {
 	START;
@@ -638,6 +668,7 @@ TEST(surface_d3d11_bind_creates_swapchain)
 
 	EXPECT_EQ(t_create_swapchain_calls, 1);
 	EXPECT_PTR(t_create_swapchain_device, (void *)(uintptr_t)0x9876);
+	EXPECT_EQ(t_create_swapchain_buffer_count, 3);
 
 	surface_free(&surface);
 	t_surface_d3d11_cleanup();
@@ -791,6 +822,7 @@ STEST(surface_d3d11)
 	RUN(surface_d3d11_bind_missing_window_native);
 	RUN(surface_d3d11_bind_rejects_non_windows_window);
 	RUN(surface_d3d11_bind_rejects_null_window_handle);
+	RUN(surface_d3d11_bind_requires_image_count);
 	RUN(surface_d3d11_bind_missing_library);
 	RUN(surface_d3d11_bind_missing_factory_symbol);
 	RUN(surface_d3d11_bind_create_factory_failure);
