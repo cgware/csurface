@@ -10,7 +10,9 @@ typedef unsigned int UINT;
 typedef unsigned long ULONG;
 typedef void *HWND;
 typedef void *IDXGIFactory;
+typedef void *IDXGIFactory5;
 typedef void *IDXGISwapChain;
+typedef void *IDXGISwapChain3;
 
 enum {
 	S_OK = 0,
@@ -27,7 +29,7 @@ typedef const GUID *REFIID;
 typedef void (*t_surface_d3d11_symbol_t)(void);
 
 typedef struct t_factory_vtbl_s {
-	HRESULT (*QueryInterface)(void);
+	HRESULT (*QueryInterface)(IDXGIFactory *self, REFIID riid, void **object);
 	ULONG (*AddRef)(void);
 	ULONG (*Release)(IDXGIFactory *self);
 	HRESULT (*SetPrivateData)(void);
@@ -40,8 +42,16 @@ typedef struct t_factory_vtbl_s {
 	HRESULT (*CreateSwapChain)(IDXGIFactory *self, void *device, void *desc, IDXGISwapChain **swapchain);
 } t_factory_vtbl_t;
 
-typedef struct t_swapchain_vtbl_s {
+typedef struct t_factory5_vtbl_s {
 	HRESULT (*QueryInterface)(void);
+	ULONG (*AddRef)(void);
+	ULONG (*Release)(IDXGIFactory5 *self);
+	void *methods[25];
+	HRESULT (*CheckFeatureSupport)(IDXGIFactory5 *self, UINT feature, void *data, UINT data_size);
+} t_factory5_vtbl_t;
+
+typedef struct t_swapchain_vtbl_s {
+	HRESULT (*QueryInterface)(IDXGISwapChain *self, REFIID riid, void **object);
 	ULONG (*AddRef)(void);
 	ULONG (*Release)(IDXGISwapChain *self);
 	HRESULT (*SetPrivateData)(void);
@@ -50,28 +60,75 @@ typedef struct t_swapchain_vtbl_s {
 	HRESULT (*GetParent)(void);
 	HRESULT (*GetDevice)(void);
 	HRESULT (*Present)(IDXGISwapChain *self, UINT sync_interval, UINT flags);
+	HRESULT (*GetBuffer)(void);
+	HRESULT (*SetFullscreenState)(void);
+	HRESULT (*GetFullscreenState)(void);
+	HRESULT (*GetDesc)(void);
+	HRESULT (*ResizeBuffers)(IDXGISwapChain *self, UINT buffer_count, UINT width, UINT height, UINT format, UINT flags);
 } t_swapchain_vtbl_t;
+
+typedef struct t_swapchain3_vtbl_s {
+	HRESULT (*QueryInterface)(void);
+	ULONG (*AddRef)(void);
+	ULONG (*Release)(IDXGISwapChain3 *self);
+	void *methods[33];
+	UINT (*GetCurrentBackBufferIndex)(IDXGISwapChain3 *self);
+} t_swapchain3_vtbl_t;
 
 typedef struct t_factory_s {
 	t_factory_vtbl_t *vtbl;
 } t_factory_t;
 
+typedef struct t_factory5_s {
+	t_factory5_vtbl_t *vtbl;
+} t_factory5_t;
+
 typedef struct t_swapchain_s {
 	t_swapchain_vtbl_t *vtbl;
 } t_swapchain_t;
 
+typedef struct t_swapchain3_s {
+	t_swapchain3_vtbl_t *vtbl;
+} t_swapchain3_t;
+
 typedef struct t_dxgi_swapchain_desc_s {
 	u8 reserved[40];
 	UINT BufferCount;
+	HWND OutputWindow;
+	int Windowed;
+	UINT SwapEffect;
+	UINT Flags;
 } t_dxgi_swapchain_desc_t;
+
+typedef struct t_surface_d3d11_data_s {
+	void *lib;
+	IDXGIFactory *factory;
+	IDXGIFactory5 *factory5;
+	IDXGISwapChain *swapchain;
+	IDXGISwapChain3 *swapchain3;
+	gfx_surface_t gfx_surface;
+	void *CreateDXGIFactory;
+	int allow_tearing;
+} t_surface_d3d11_data_t;
 
 static int t_create_factory_calls;
 static int t_create_swapchain_calls;
 static int t_present_calls;
+static UINT t_present_sync_interval;
+static UINT t_present_flags;
+static UINT t_create_swapchain_flags;
+static UINT t_resize_flags;
+static int t_factory5_supported;
+static int t_factory5_query_failure;
+static int t_query_swapchain3_calls;
+static HRESULT t_query_swapchain3_ret;
+static int t_query_swapchain3_null;
+static UINT t_back_buffer_index;
 static int t_release_factory_calls;
 static int t_release_swapchain_calls;
 static void *t_create_swapchain_device;
 static UINT t_create_swapchain_buffer_count;
+static UINT t_create_swapchain_swap_effect;
 static int t_display_native_ret;
 static int t_window_native_ret;
 static int t_gfx_native_ret;
@@ -86,7 +143,9 @@ static HRESULT t_create_swapchain_ret;
 static int t_create_swapchain_null;
 static HRESULT t_present_ret;
 static t_factory_t t_factory;
+static t_factory5_t t_factory5;
 static t_swapchain_t t_swapchain;
+static t_swapchain3_t t_swapchain3;
 static proc_t t_proc;
 static display_t t_display;
 static gfx_t t_gfx;
@@ -116,11 +175,59 @@ static ULONG t_factory_release(IDXGIFactory *self)
 	return 0;
 }
 
+static HRESULT t_factory_query_interface(IDXGIFactory *self, REFIID riid, void **object)
+{
+	(void)self;
+	(void)riid;
+	*object = t_factory5_query_failure ? NULL : &t_factory5;
+	return t_factory5_query_failure ? -1 : S_OK;
+}
+
+static ULONG t_factory5_release(IDXGIFactory5 *self)
+{
+	(void)self;
+	t_release_factory_calls++;
+	return 0;
+}
+
+static HRESULT t_CheckFeatureSupport(IDXGIFactory5 *self, UINT feature, void *data, UINT data_size)
+{
+	(void)self;
+	(void)feature;
+	if (data == NULL || data_size != sizeof(int)) {
+		return -1;
+	}
+	*(int *)data = t_factory5_supported;
+	return S_OK;
+}
+
 static ULONG t_swapchain_release(IDXGISwapChain *self)
 {
 	(void)self;
 	t_release_swapchain_calls++;
 	return 0;
+}
+
+static ULONG t_swapchain3_release(IDXGISwapChain3 *self)
+{
+	(void)self;
+	t_release_swapchain_calls++;
+	return 0;
+}
+
+static HRESULT t_swapchain_query_interface(IDXGISwapChain *self, REFIID riid, void **object)
+{
+	(void)self;
+	(void)riid;
+	t_query_swapchain3_calls++;
+	*object = t_query_swapchain3_ret < 0 || t_query_swapchain3_null ? NULL : &t_swapchain3;
+	return t_query_swapchain3_ret;
+}
+
+static UINT t_GetCurrentBackBufferIndex(IDXGISwapChain3 *self)
+{
+	(void)self;
+	return t_back_buffer_index;
 }
 
 static HRESULT t_CreateSwapChain(IDXGIFactory *self, void *device, void *desc, IDXGISwapChain **swapchain)
@@ -130,6 +237,8 @@ static HRESULT t_CreateSwapChain(IDXGIFactory *self, void *device, void *desc, I
 	t_create_swapchain_device = device;
 	if (desc != NULL) {
 		t_create_swapchain_buffer_count = ((const t_dxgi_swapchain_desc_t *)desc)->BufferCount;
+		t_create_swapchain_swap_effect	= ((const t_dxgi_swapchain_desc_t *)desc)->SwapEffect;
+		t_create_swapchain_flags	= ((const t_dxgi_swapchain_desc_t *)desc)->Flags;
 	}
 	*swapchain = t_create_swapchain_null ? NULL : (IDXGISwapChain *)&t_swapchain;
 	return t_create_swapchain_ret;
@@ -138,10 +247,21 @@ static HRESULT t_CreateSwapChain(IDXGIFactory *self, void *device, void *desc, I
 static HRESULT t_Present(IDXGISwapChain *self, UINT sync_interval, UINT flags)
 {
 	(void)self;
-	(void)sync_interval;
-	(void)flags;
 	t_present_calls++;
+	t_present_sync_interval = sync_interval;
+	t_present_flags		= flags;
 	return t_present_ret;
+}
+
+static HRESULT t_ResizeBuffers(IDXGISwapChain *self, UINT buffer_count, UINT width, UINT height, UINT format, UINT flags)
+{
+	(void)self;
+	(void)buffer_count;
+	(void)width;
+	(void)height;
+	(void)format;
+	t_resize_flags = flags;
+	return S_OK;
 }
 
 static HRESULT t_CreateDXGIFactory(REFIID riid, void **factory)
@@ -153,13 +273,26 @@ static HRESULT t_CreateDXGIFactory(REFIID riid, void **factory)
 }
 
 static t_factory_vtbl_t t_factory_vtbl = {
+	.QueryInterface	 = t_factory_query_interface,
 	.Release	 = t_factory_release,
 	.CreateSwapChain = t_CreateSwapChain,
 };
 
+static t_factory5_vtbl_t t_factory5_vtbl = {
+	.Release	     = t_factory5_release,
+	.CheckFeatureSupport = t_CheckFeatureSupport,
+};
+
 static t_swapchain_vtbl_t t_swapchain_vtbl = {
-	.Release = t_swapchain_release,
-	.Present = t_Present,
+	.QueryInterface = t_swapchain_query_interface,
+	.Release	= t_swapchain_release,
+	.Present	= t_Present,
+	.ResizeBuffers	= t_ResizeBuffers,
+};
+
+static t_swapchain3_vtbl_t t_swapchain3_vtbl = {
+	.Release		   = t_swapchain3_release,
+	.GetCurrentBackBufferIndex = t_GetCurrentBackBufferIndex,
 };
 
 static int t_display_native(display_t *display, display_native_t *native)
@@ -209,10 +342,21 @@ static void t_surface_d3d11_reset(void)
 	t_create_factory_calls		= 0;
 	t_create_swapchain_calls	= 0;
 	t_present_calls			= 0;
+	t_present_sync_interval		= 0;
+	t_present_flags			= 0;
+	t_create_swapchain_flags	= 0;
+	t_resize_flags			= 0;
+	t_factory5_supported		= 1;
+	t_factory5_query_failure	= 0;
+	t_query_swapchain3_calls	= 0;
+	t_query_swapchain3_ret		= S_OK;
+	t_query_swapchain3_null		= 0;
+	t_back_buffer_index		= 0;
 	t_release_factory_calls		= 0;
 	t_release_swapchain_calls	= 0;
 	t_create_swapchain_device	= NULL;
 	t_create_swapchain_buffer_count = 0;
+	t_create_swapchain_swap_effect	= 0;
 	t_display_native_ret		= 0;
 	t_window_native_ret		= 0;
 	t_gfx_native_ret		= 0;
@@ -227,7 +371,9 @@ static void t_surface_d3d11_reset(void)
 	t_create_swapchain_null		= 0;
 	t_present_ret			= S_OK;
 	t_factory.vtbl			= &t_factory_vtbl;
+	t_factory5.vtbl			= &t_factory5_vtbl;
 	t_swapchain.vtbl		= &t_swapchain_vtbl;
+	t_swapchain3.vtbl		= &t_swapchain3_vtbl;
 	t_proc				= (proc_t){0};
 	proc_init(&t_proc, 0, 1, ALLOC_STD);
 	proc_setdlsym(&t_proc,
@@ -656,6 +802,46 @@ TEST(surface_d3d11_bind_create_swapchain_null)
 	END;
 }
 
+TEST(surface_d3d11_bind_query_swapchain3_failure)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	t_query_swapchain3_ret = -1;
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 1);
+	log_set_quiet(0, 0);
+	EXPECT_EQ(t_query_swapchain3_calls, 1);
+	EXPECT_EQ(t_release_swapchain_calls, 1);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
+TEST(surface_d3d11_bind_query_swapchain3_null)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	t_query_swapchain3_null = 1;
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 1);
+	log_set_quiet(0, 0);
+	EXPECT_EQ(t_query_swapchain3_calls, 1);
+	EXPECT_EQ(t_release_swapchain_calls, 1);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
 TEST(surface_d3d11_bind_creates_swapchain)
 {
 	START;
@@ -669,6 +855,8 @@ TEST(surface_d3d11_bind_creates_swapchain)
 	EXPECT_EQ(t_create_swapchain_calls, 1);
 	EXPECT_PTR(t_create_swapchain_device, (void *)(uintptr_t)0x9876);
 	EXPECT_EQ(t_create_swapchain_buffer_count, 3);
+	EXPECT_EQ(t_create_swapchain_swap_effect, 4);
+	EXPECT_EQ(t_create_swapchain_flags, 0x00000800);
 
 	surface_free(&surface);
 	t_surface_d3d11_cleanup();
@@ -685,8 +873,8 @@ TEST(surface_d3d11_bind_replaces_swapchain)
 	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
 
 	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
-	EXPECT_EQ(t_release_swapchain_calls, 1);
-	EXPECT_EQ(t_release_factory_calls, 1);
+	EXPECT_EQ(t_release_swapchain_calls, 2);
+	EXPECT_EQ(t_release_factory_calls, 2);
 
 	surface_free(&surface);
 	t_surface_d3d11_cleanup();
@@ -760,6 +948,8 @@ TEST(surface_d3d11_gfx_present_calls_swapchain)
 	native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT);
 
 	EXPECT_EQ(t_present_calls, 1);
+	EXPECT_EQ(t_present_sync_interval, 1);
+	EXPECT_EQ(t_present_flags, 0);
 
 	surface_free(&surface);
 	t_surface_d3d11_cleanup();
@@ -803,6 +993,202 @@ TEST(surface_d3d11_gfx_present_failure)
 	END;
 }
 
+TEST(surface_d3d11_gfx_present_mode_rejects_invalid_args)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	gfx_present_mode_t actual = GFX_PRESENT_MODE_DEFAULT;
+	gfx_surface_t empty	  = {0};
+	EXPECT_EQ(native.gfx_surface->ops->present_mode(NULL, GFX_PRESENT_MODE_DEFAULT, &actual), 1);
+	EXPECT_EQ(native.gfx_surface->ops->present_mode(&empty, GFX_PRESENT_MODE_DEFAULT, &actual), 1);
+	EXPECT_EQ(native.gfx_surface->ops->present_mode(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT, NULL), 1);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
+TEST(surface_d3d11_gfx_configure_rejects_invalid_args)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	gfx_surface_t empty	    = {0};
+	gfx_surface_config_t config = {.width = 1, .height = 1};
+	EXPECT_EQ(native.gfx_surface->ops->configure(NULL, &config), 1);
+	EXPECT_EQ(native.gfx_surface->ops->configure(&empty, &config), 1);
+	EXPECT_EQ(native.gfx_surface->ops->configure(native.gfx_surface, NULL), 1);
+	EXPECT_EQ(native.gfx_surface->ops->configure(native.gfx_surface, &(gfx_surface_config_t){.width = 0, .height = 1}), 1);
+	EXPECT_EQ(native.gfx_surface->ops->configure(native.gfx_surface, &(gfx_surface_config_t){.width = 1, .height = 0}), 1);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
+TEST(surface_d3d11_gfx_configure_requires_swapchain)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	t_surface_d3d11_data_t ctx = {0};
+	gfx_surface_t fake	   = {.data = &ctx};
+	EXPECT_EQ(native.gfx_surface->ops->configure(&fake, &(gfx_surface_config_t){.width = 1, .height = 1}), 1);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
+TEST(surface_d3d11_gfx_acquire_rejects_invalid_args)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	u32 index	    = 0;
+	gfx_surface_t empty = {0};
+	EXPECT_EQ(native.gfx_surface->ops->acquire(NULL, &index), 1);
+	EXPECT_EQ(native.gfx_surface->ops->acquire(&empty, &index), 1);
+	EXPECT_EQ(native.gfx_surface->ops->acquire(native.gfx_surface, NULL), 1);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
+TEST(surface_d3d11_gfx_acquire_requires_swapchain3)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	t_surface_d3d11_data_t ctx = {0};
+	gfx_surface_t fake	   = {.data = &ctx};
+	u32 index		   = 0;
+	EXPECT_EQ(native.gfx_surface->ops->acquire(&fake, &index), 1);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
+TEST(surface_d3d11_gfx_acquire_returns_current_index)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	t_back_buffer_index = 2;
+	surface_t surface   = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+	u32 index = 0;
+	EXPECT_EQ(native.gfx_surface->ops->acquire(native.gfx_surface, &index), 0);
+	EXPECT_EQ(index, 2);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
+TEST(surface_d3d11_gfx_immediate_present_allows_tearing)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	gfx_present_mode_t actual = GFX_PRESENT_MODE_DEFAULT;
+	EXPECT_EQ(native.gfx_surface->ops->present_mode(native.gfx_surface, GFX_PRESENT_MODE_IMMEDIATE, &actual), 0);
+	EXPECT_EQ(actual, GFX_PRESENT_MODE_IMMEDIATE);
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, actual), 0);
+	EXPECT_EQ(t_present_sync_interval, 0);
+	EXPECT_EQ(t_present_flags, 0x00000200);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
+TEST(surface_d3d11_gfx_immediate_falls_back_without_tearing)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	t_factory5_query_failure = 1;
+	surface_t surface	 = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	EXPECT_EQ(t_create_swapchain_flags, 0);
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	gfx_present_mode_t actual = GFX_PRESENT_MODE_DEFAULT;
+	EXPECT_EQ(native.gfx_surface->ops->present_mode(native.gfx_surface, GFX_PRESENT_MODE_IMMEDIATE, &actual), 0);
+	EXPECT_EQ(actual, GFX_PRESENT_MODE_VSYNC);
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, actual), 0);
+	EXPECT_EQ(t_present_sync_interval, 1);
+	EXPECT_EQ(t_present_flags, 0);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
+TEST(surface_d3d11_gfx_resize_preserves_tearing_flag)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	surface_t surface = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+
+	EXPECT_EQ(native.gfx_surface->ops->configure(native.gfx_surface, &(gfx_surface_config_t){.width = 800, .height = 600}), 0);
+	EXPECT_EQ(t_resize_flags, 0x00000800);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
 STEST(surface_d3d11)
 {
 	SSTART;
@@ -829,14 +1215,25 @@ STEST(surface_d3d11)
 	RUN(surface_d3d11_bind_create_factory_null);
 	RUN(surface_d3d11_bind_create_swapchain_failure);
 	RUN(surface_d3d11_bind_create_swapchain_null);
+	RUN(surface_d3d11_bind_query_swapchain3_failure);
+	RUN(surface_d3d11_bind_query_swapchain3_null);
 	RUN(surface_d3d11_bind_creates_swapchain);
 	RUN(surface_d3d11_bind_replaces_swapchain);
 	RUN(surface_d3d11_native_returns_surface);
 	RUN(surface_d3d11_native_without_bind);
 	RUN(surface_d3d11_native_null_data);
 	RUN(surface_d3d11_gfx_present_calls_swapchain);
+	RUN(surface_d3d11_gfx_immediate_present_allows_tearing);
+	RUN(surface_d3d11_gfx_immediate_falls_back_without_tearing);
+	RUN(surface_d3d11_gfx_resize_preserves_tearing_flag);
 	RUN(surface_d3d11_gfx_present_null_surface);
 	RUN(surface_d3d11_gfx_present_failure);
+	RUN(surface_d3d11_gfx_present_mode_rejects_invalid_args);
+	RUN(surface_d3d11_gfx_configure_rejects_invalid_args);
+	RUN(surface_d3d11_gfx_configure_requires_swapchain);
+	RUN(surface_d3d11_gfx_acquire_rejects_invalid_args);
+	RUN(surface_d3d11_gfx_acquire_requires_swapchain3);
+	RUN(surface_d3d11_gfx_acquire_returns_current_index);
 
 	SEND;
 }

@@ -15,6 +15,7 @@ enum {
 	EXAMPLE_TITLE_SIZE		= 128,
 	EXAMPLE_RECT_INDEX_COUNT	= 6,
 	EXAMPLE_CUBE_INDEX_COUNT	= 36,
+	EXAMPLE_SWAPCHAIN_IMAGE_COUNT	= 2,
 };
 
 enum {
@@ -418,7 +419,7 @@ static int set_target_size(example_target_t *target, u16 width, u16 height)
 		.height		 = height,
 		.present_mode	 = GFX_PRESENT_MODE_IMMEDIATE,
 		.images		 = target->swapchain_images,
-		.min_image_count = 2,
+		.min_image_count = EXAMPLE_SWAPCHAIN_IMAGE_COUNT,
 		.image_capacity	 = sizeof(target->swapchain_images) / sizeof(target->swapchain_images[0]),
 	};
 	if (gfx_swapchain_init(&target->swapchain, &target->gfx, &swapchain_config) == NULL) {
@@ -469,7 +470,7 @@ static int init_target_graphics(display_t *display, proc_t *proc, gfx_driver_t *
 		return -1;
 	}
 
-	u32 image_count		    = sizeof(target->swapchain_images) / sizeof(target->swapchain_images[0]);
+	u32 image_count		    = EXAMPLE_SWAPCHAIN_IMAGE_COUNT;
 	surface_gfx_config_t config = target_graphics_config(display, driver, image_count);
 	if (!surface_gfx_supported(&config)) {
 		return 0;
@@ -545,7 +546,7 @@ static int bind_target_graphics(display_t *display, proc_t *proc, example_target
 		return 1;
 	}
 
-	u32 image_count		    = sizeof(target->swapchain_images) / sizeof(target->swapchain_images[0]);
+	u32 image_count		    = EXAMPLE_SWAPCHAIN_IMAGE_COUNT;
 	surface_gfx_config_t config = target_graphics_config(display, target->driver, image_count);
 	return surface_gfx_bind(&target->surface, &target->gfx, window, &config, proc, ALLOC_STD);
 }
@@ -768,121 +769,22 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 		clear_target_graphics(&next);
 		return 0;
 	}
+	clear_target_graphics(&next);
 
-	gfx_buffer_free(&target->world_ub);
-	gfx_buffer_free(&target->gui_ub);
-	gfx_buffer_free(&target->cube_ib);
-	gfx_buffer_free(&target->rect_ib);
-	gfx_buffer_free(&target->vb);
-	gfx_shader_free(&target->vs);
-	gfx_shader_free(&target->fs);
-	gfx_pipeline_free(&target->pipeline);
-	gfx_framebuffer_free(&target->framebuffer);
-	if (surface_unbind(&target->surface)) {
-		clear_target_graphics(&next);
-		return -1;
-	}
-	if (bind_target_graphics(state->display, state->proc, &next, &target->window) ||
-	    set_target_size(&next, target->width, target->height) || init_target_pipeline(&next, state->shader_compiler)) {
-		clear_target_graphics(&next);
-		if (restore_target_graphics(state, target) || init_target_pipeline(target, state->shader_compiler)) {
+	gfx_driver_t *old_driver = target->driver;
+	clear_target_graphics(target);
+	int target_initialized = init_target_graphics(state->display, state->proc, driver, target);
+	if (target_initialized <= 0 || bind_target_graphics(state->display, state->proc, target, &target->window) ||
+	    set_target_size(target, target->width, target->height) || init_target_pipeline(target, state->shader_compiler)) {
+		clear_target_graphics(target);
+		if (init_target_graphics(state->display, state->proc, old_driver, target) <= 0 || restore_target_graphics(state, target) ||
+		    init_target_pipeline(target, state->shader_compiler)) {
 			return -1;
 		}
 		return 0;
 	}
 
-	gfx_t old_gfx			  = target->gfx;
-	gfx_buffer_t old_rect_ib	  = target->rect_ib;
-	gfx_buffer_t old_cube_ib	  = target->cube_ib;
-	gfx_buffer_t old_vb		  = target->vb;
-	gfx_buffer_t old_gui_ub		  = target->gui_ub;
-	gfx_buffer_t old_world_ub	  = target->world_ub;
-	gfx_shader_t old_vs		  = target->vs;
-	gfx_shader_t old_fs		  = target->fs;
-	gfx_render_pass_t old_render_pass = target->render_pass;
-	gfx_framebuffer_t old_framebuffer = target->framebuffer;
-	gfx_pipeline_t old_pipeline	  = target->pipeline;
-	gfx_swapchain_t old_swapchain	  = target->swapchain;
-	gfx_image_t old_swapchain_images[8];
-	mem_copy(old_swapchain_images, sizeof(old_swapchain_images), target->swapchain_images, sizeof(old_swapchain_images));
-	old_rect_ib.gfx		    = &old_gfx;
-	old_cube_ib.gfx		    = &old_gfx;
-	old_vb.gfx		    = &old_gfx;
-	old_gui_ub.gfx		    = &old_gfx;
-	old_world_ub.gfx	    = &old_gfx;
-	old_vs.gfx		    = &old_gfx;
-	old_fs.gfx		    = &old_gfx;
-	old_render_pass.gfx	    = &old_gfx;
-	old_framebuffer.gfx	    = &old_gfx;
-	old_framebuffer.image	    = &old_swapchain_images[0];
-	old_framebuffer.render_pass = &old_render_pass;
-	old_pipeline.gfx	    = &old_gfx;
-	old_pipeline.render_pass    = &old_render_pass;
-	old_swapchain.gfx	    = &old_gfx;
-	old_swapchain.images	    = old_swapchain_images;
-	for (u32 i = 0; i < old_swapchain.image_capacity && i < sizeof(old_swapchain_images) / sizeof(old_swapchain_images[0]); i++) {
-		old_swapchain_images[i].gfx = &old_gfx;
-		if (old_swapchain_images[i].swapchain == &target->swapchain) {
-			old_swapchain_images[i].swapchain = &old_swapchain;
-		}
-	}
-	surface_t old_surface	= target->surface;
-	old_surface.config.gfx	= &old_gfx;
-	next.surface.config.gfx = &next.gfx;
-	mem_copy(target->swapchain_images, sizeof(target->swapchain_images), next.swapchain_images, sizeof(target->swapchain_images));
-	target->gfx			= next.gfx;
-	target->rect_ib			= next.rect_ib;
-	target->cube_ib			= next.cube_ib;
-	target->vb			= next.vb;
-	target->gui_ub			= next.gui_ub;
-	target->world_ub		= next.world_ub;
-	target->vs			= next.vs;
-	target->fs			= next.fs;
-	target->render_pass		= next.render_pass;
-	target->framebuffer		= next.framebuffer;
-	target->pipeline		= next.pipeline;
-	target->swapchain		= next.swapchain;
-	target->swapchain.images	= target->swapchain_images;
-	target->frame_image		= &target->swapchain.images[0];
-	target->rect_ib.gfx		= &target->gfx;
-	target->cube_ib.gfx		= &target->gfx;
-	target->vb.gfx			= &target->gfx;
-	target->gui_ub.gfx		= &target->gfx;
-	target->world_ub.gfx		= &target->gfx;
-	target->vs.gfx			= &target->gfx;
-	target->fs.gfx			= &target->gfx;
-	target->render_pass.gfx		= &target->gfx;
-	target->framebuffer.gfx		= &target->gfx;
-	target->framebuffer.image	= target->frame_image;
-	target->framebuffer.render_pass = &target->render_pass;
-	target->pipeline.gfx		= &target->gfx;
-	target->pipeline.render_pass	= &target->render_pass;
-	target->swapchain.gfx		= &target->gfx;
-	for (u32 i = 0; i < target->swapchain.image_capacity && i < sizeof(target->swapchain_images) / sizeof(target->swapchain_images[0]);
-	     i++) {
-		target->swapchain_images[i].gfx = &target->gfx;
-		if (target->swapchain_images[i].swapchain == &next.swapchain) {
-			target->swapchain_images[i].swapchain = &target->swapchain;
-		}
-	}
-	target->surface		   = next.surface;
-	target->surface.config.gfx = &target->gfx;
-	target->driver		   = driver;
-	target->redraw		   = 1;
-	gfx_buffer_free(&old_cube_ib);
-	gfx_buffer_free(&old_rect_ib);
-	gfx_buffer_free(&old_vb);
-	gfx_buffer_free(&old_world_ub);
-	gfx_buffer_free(&old_gui_ub);
-	gfx_shader_free(&old_vs);
-	gfx_shader_free(&old_fs);
-	gfx_pipeline_free(&old_pipeline);
-	gfx_framebuffer_free(&old_framebuffer);
-	gfx_swapchain_free(&old_swapchain);
-	gfx_render_pass_free(&old_render_pass);
-	surface_free(&old_surface);
-	gfx_free(&old_gfx);
-
+	target->redraw = 1;
 	if (update_target_title(target)) {
 		return -1;
 	}

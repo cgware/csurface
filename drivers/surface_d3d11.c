@@ -10,14 +10,19 @@ typedef unsigned int DXGI_FORMAT;
 typedef unsigned int DXGI_USAGE;
 typedef void *HWND;
 typedef void *IDXGIFactory;
+typedef void *IDXGIFactory5;
 typedef void *IDXGISwapChain;
+typedef void *IDXGISwapChain3;
 
 enum {
-	S_OK				= 0,
-	DXGI_FORMAT_R8G8B8A8_UNORM	= 28,
-	DXGI_USAGE_RENDER_TARGET_OUTPUT = 0x00000020,
-	DXGI_SWAP_EFFECT_DISCARD	= 0,
-	DXGI_SWAP_CHAIN_WINDOWED	= 1,
+	S_OK				   = 0,
+	DXGI_FORMAT_R8G8B8A8_UNORM	   = 28,
+	DXGI_USAGE_RENDER_TARGET_OUTPUT	   = 0x00000020,
+	DXGI_SWAP_EFFECT_FLIP_DISCARD	   = 4,
+	DXGI_SWAP_CHAIN_WINDOWED	   = 1,
+	DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING = 0x00000800,
+	DXGI_PRESENT_ALLOW_TEARING	   = 0x00000200,
+	DXGI_FEATURE_PRESENT_ALLOW_TEARING = 0,
 };
 
 typedef struct GUID_s {
@@ -29,7 +34,9 @@ typedef struct GUID_s {
 
 typedef const GUID *REFIID;
 
-static const GUID IID_IDXGIFactory = {0x7b7166ecu, 0x21c7u, 0x44aeu, {0xb2, 0x1a, 0xc9, 0xae, 0x32, 0x1a, 0xe3, 0x69}};
+static const GUID IID_IDXGIFactory    = {0x7b7166ecu, 0x21c7u, 0x44aeu, {0xb2, 0x1a, 0xc9, 0xae, 0x32, 0x1a, 0xe3, 0x69}};
+static const GUID IID_IDXGIFactory5   = {0x7632e1f5u, 0xee65u, 0x4dcau, {0x87, 0xfd, 0x84, 0xcd, 0x75, 0xf8, 0x83, 0x8d}};
+static const GUID IID_IDXGISwapChain3 = {0x94d99bdbu, 0xf1f8u, 0x4ab0u, {0xb2, 0x36, 0x7d, 0xa0, 0x17, 0x0e, 0xda, 0xb1}};
 
 typedef struct DXGI_RATIONAL_s {
 	UINT Numerator;
@@ -85,16 +92,40 @@ typedef struct IDXGISwapChainVTable_s {
 	HRESULT (*GetParent)(void);
 	HRESULT (*GetDevice)(void);
 	HRESULT (*Present)(IDXGISwapChain *self, UINT sync_interval, UINT flags);
+	HRESULT (*GetBuffer)(void);
+	HRESULT (*SetFullscreenState)(void);
+	HRESULT (*GetFullscreenState)(void);
+	HRESULT (*GetDesc)(void);
+	HRESULT (*ResizeBuffers)(IDXGISwapChain *self, UINT buffer_count, UINT width, UINT height, DXGI_FORMAT format, UINT flags);
 } IDXGISwapChainVTable;
+
+typedef struct IDXGIFactory5VTable_s {
+	HRESULT (*QueryInterface)(IDXGIFactory5 *self, REFIID riid, void **object);
+	ULONG (*AddRef)(IDXGIFactory5 *self);
+	ULONG (*Release)(IDXGIFactory5 *self);
+	void *methods[25];
+	HRESULT (*CheckFeatureSupport)(IDXGIFactory5 *self, UINT feature, void *data, UINT data_size);
+} IDXGIFactory5VTable;
+
+typedef struct IDXGISwapChain3VTable_s {
+	HRESULT (*QueryInterface)(IDXGISwapChain3 *self, REFIID riid, void **object);
+	ULONG (*AddRef)(IDXGISwapChain3 *self);
+	ULONG (*Release)(IDXGISwapChain3 *self);
+	void *methods[33];
+	UINT (*GetCurrentBackBufferIndex)(IDXGISwapChain3 *self);
+} IDXGISwapChain3VTable;
 
 typedef HRESULT (*PFN_CreateDXGIFactory)(REFIID riid, void **factory);
 
 typedef struct surface_d3d11_s {
 	void *lib;
 	IDXGIFactory *factory;
+	IDXGIFactory5 *factory5;
 	IDXGISwapChain *swapchain;
+	IDXGISwapChain3 *swapchain3;
 	gfx_surface_t gfx_surface;
 	PFN_CreateDXGIFactory CreateDXGIFactory;
+	int allow_tearing;
 } surface_d3d11_t;
 
 static int hresult_ok(HRESULT hr)
@@ -137,8 +168,14 @@ static int surface_d3d11_unbind(surface_t *srf)
 	}
 
 	surface_d3d11_t *ctx = srf->data;
+	if (ctx->swapchain3 != NULL) {
+		d3d11_release(ctx->swapchain3);
+	}
 	if (ctx->swapchain != NULL) {
 		d3d11_release(ctx->swapchain);
+	}
+	if (ctx->factory5 != NULL) {
+		d3d11_release(ctx->factory5);
 	}
 	if (ctx->factory != NULL) {
 		d3d11_release(ctx->factory);
@@ -146,10 +183,13 @@ static int surface_d3d11_unbind(surface_t *srf)
 	if (ctx->lib != NULL) {
 		proc_dlclose(srf->config.display->proc, ctx->lib);
 	}
-	ctx->lib	 = NULL;
-	ctx->factory	 = NULL;
-	ctx->swapchain	 = NULL;
-	ctx->gfx_surface = (gfx_surface_t){0};
+	ctx->lib	   = NULL;
+	ctx->factory	   = NULL;
+	ctx->factory5	   = NULL;
+	ctx->swapchain	   = NULL;
+	ctx->swapchain3	   = NULL;
+	ctx->allow_tearing = 0;
+	ctx->gfx_surface   = (gfx_surface_t){0};
 	return 0;
 }
 
@@ -209,8 +249,8 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 		log_error("csurface", "surface_d3d11", NULL, "Windows native window is unavailable");
 		return 1;
 	}
-	if (srf->config.surface.image_count == 0) {
-		log_error("csurface", "surface_d3d11", NULL, "D3D11 surface requires explicit swapchain image count");
+	if (srf->config.surface.image_count < 2) {
+		log_error("csurface", "surface_d3d11", NULL, "D3D11 flip-model surface requires at least two swapchain images");
 		return 1;
 	}
 
@@ -227,6 +267,15 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 		surface_d3d11_unbind(srf);
 		return 1;
 	}
+	IDXGIFactoryVTable *factory = *(IDXGIFactoryVTable **)ctx->factory;
+	if (hresult_ok(factory->QueryInterface(ctx->factory, &IID_IDXGIFactory5, (void **)&ctx->factory5)) && ctx->factory5 != NULL) {
+		IDXGIFactory5VTable *factory5 = *(IDXGIFactory5VTable **)ctx->factory5;
+		int supported		      = 0;
+		if (hresult_ok(factory5->CheckFeatureSupport(
+			    ctx->factory5, DXGI_FEATURE_PRESENT_ALLOW_TEARING, &supported, sizeof(supported)))) {
+			ctx->allow_tearing = supported != 0;
+		}
+	}
 
 	DXGI_SWAP_CHAIN_DESC desc = {
 		.BufferDesc =
@@ -241,13 +290,19 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 		.BufferCount  = srf->config.surface.image_count,
 		.OutputWindow = native_window.window,
 		.Windowed     = DXGI_SWAP_CHAIN_WINDOWED,
-		.SwapEffect   = DXGI_SWAP_EFFECT_DISCARD,
+		.SwapEffect   = DXGI_SWAP_EFFECT_FLIP_DISCARD,
+		.Flags	      = ctx->allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0,
 	};
 
-	IDXGIFactoryVTable *factory = *(IDXGIFactoryVTable **)ctx->factory;
 	if (!hresult_ok(factory->CreateSwapChain(ctx->factory, (void *)(uintptr_t)native_gfx.device, &desc, &ctx->swapchain)) ||
 	    ctx->swapchain == NULL) {
 		log_error("csurface", "surface_d3d11", NULL, "failed to create DXGI swapchain");
+		surface_d3d11_unbind(srf);
+		return 1;
+	}
+	IDXGISwapChainVTable *swap = *(IDXGISwapChainVTable **)ctx->swapchain;
+	if (!hresult_ok(swap->QueryInterface(ctx->swapchain, &IID_IDXGISwapChain3, (void **)&ctx->swapchain3)) || ctx->swapchain3 == NULL) {
+		log_error("csurface", "surface_d3d11", NULL, "failed to get DXGI 1.4 swapchain interface");
 		surface_d3d11_unbind(srf);
 		return 1;
 	}
@@ -261,6 +316,30 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 	return 0;
 }
 
+static int surface_d3d11_gfx_present_mode(gfx_surface_t *surface, gfx_present_mode_t requested, gfx_present_mode_t *actual)
+{
+	if (surface == NULL || surface->data == NULL || actual == NULL) {
+		return 1;
+	}
+	surface_d3d11_t *ctx = surface->data;
+	*actual = requested == GFX_PRESENT_MODE_IMMEDIATE && ctx->allow_tearing ? GFX_PRESENT_MODE_IMMEDIATE : GFX_PRESENT_MODE_VSYNC;
+	return 0;
+}
+
+static int surface_d3d11_gfx_configure(gfx_surface_t *surface, const gfx_surface_config_t *config)
+{
+	if (surface == NULL || surface->data == NULL || config == NULL || config->width == 0 || config->height == 0) {
+		return 1;
+	}
+	surface_d3d11_t *ctx = surface->data;
+	if (ctx->swapchain == NULL) {
+		return 1;
+	}
+	IDXGISwapChainVTable *swap = *(IDXGISwapChainVTable **)ctx->swapchain;
+	UINT flags		   = ctx->allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+	return hresult_ok(swap->ResizeBuffers(ctx->swapchain, 0, config->width, config->height, 0, flags)) ? 0 : 1;
+}
+
 static int surface_d3d11_gfx_present(gfx_surface_t *surface, gfx_present_mode_t present_mode)
 {
 	if (surface == NULL || surface->data == NULL) {
@@ -269,11 +348,30 @@ static int surface_d3d11_gfx_present(gfx_surface_t *surface, gfx_present_mode_t 
 
 	surface_d3d11_t *ctx	   = surface->data;
 	IDXGISwapChainVTable *swap = *(IDXGISwapChainVTable **)ctx->swapchain;
-	return hresult_ok(swap->Present(ctx->swapchain, present_mode == GFX_PRESENT_MODE_IMMEDIATE ? 0 : 1, 0)) ? 0 : 1;
+	UINT immediate		   = present_mode == GFX_PRESENT_MODE_IMMEDIATE && ctx->allow_tearing;
+	return hresult_ok(swap->Present(ctx->swapchain, immediate ? 0 : 1, immediate ? DXGI_PRESENT_ALLOW_TEARING : 0)) ? 0 : 1;
+}
+
+static int surface_d3d11_gfx_acquire(gfx_surface_t *surface, u32 *image_index)
+{
+	if (surface == NULL || surface->data == NULL || image_index == NULL) {
+		return 1;
+	}
+
+	surface_d3d11_t *ctx = surface->data;
+	if (ctx->swapchain3 == NULL) {
+		return 1;
+	}
+	IDXGISwapChain3VTable *swap = *(IDXGISwapChain3VTable **)ctx->swapchain3;
+	*image_index		    = swap->GetCurrentBackBufferIndex(ctx->swapchain3);
+	return 0;
 }
 
 static const gfx_surface_ops_t surface_d3d11_gfx_ops = {
-	.present = surface_d3d11_gfx_present,
+	.present_mode = surface_d3d11_gfx_present_mode,
+	.configure    = surface_d3d11_gfx_configure,
+	.acquire      = surface_d3d11_gfx_acquire,
+	.present      = surface_d3d11_gfx_present,
 };
 
 static int surface_d3d11_native(surface_t *srf, surface_native_t *native)
