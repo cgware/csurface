@@ -55,7 +55,8 @@ typedef struct example_target_s {
 	gfx_shader_t fs;
 	gfx_render_pass_t render_pass;
 	gfx_framebuffer_t framebuffer;
-	gfx_pipeline_t pipeline;
+	gfx_pipeline_t gui_pipeline;
+	gfx_pipeline_t world_pipeline;
 	gfx_swapchain_t swapchain;
 	gfx_image_t swapchain_images[8];
 	gfx_image_t *frame_image;
@@ -226,34 +227,21 @@ static int draw(example_target_t *target, u64 now)
 	}
 
 	gfx_pass_config_t pass_config = {
-		.clear	  = {0.1f, 0.2f, 0.3f, 1.0f},
-		.viewport = {0, 0, target->width, target->height},
+		.clear	     = {0.1f, 0.2f, 0.3f, 1.0f},
+		.clear_depth = 1.0f,
+		.viewport    = {0, 0, target->width, target->height},
 	};
 	if (gfx_framebuffer_pass_begin(&target->framebuffer, &frame, &pass_config)) {
 		log_error("csurface_example", "draw", NULL, "failed to begin render pass");
 		return 1;
 	}
-	if (gfx_pipeline_bind(&frame, &target->pipeline)) {
-		log_error("csurface_example", "draw", NULL, "failed to bind pipeline");
+	if (gfx_pipeline_bind(&frame, &target->world_pipeline)) {
+		log_error("csurface_example", "draw", NULL, "failed to bind world pipeline");
 		gfx_end(&frame);
 		return 1;
 	}
 	if (gfx_buffer_bind(&frame, &target->vb)) {
 		log_error("csurface_example", "draw", NULL, "failed to bind vertex buffer");
-		gfx_end(&frame);
-		return 1;
-	}
-	const gfx_resource_binding_t gui_resources[] = {
-		{.binding = 0, .type = GFX_RESOURCE_UNIFORM_BUFFER, .buffer = &target->gui_ub},
-	};
-	if (gfx_bind_resources(&frame, gui_resources, (u32)(sizeof(gui_resources) / sizeof(gui_resources[0]))) ||
-	    gfx_buffer_bind(&frame, &target->rect_ib)) {
-		log_error("csurface_example", "draw", NULL, "failed to bind rectangle draw state");
-		gfx_end(&frame);
-		return 1;
-	}
-	if (gfx_draw_indexed(&frame, EXAMPLE_RECT_INDEX_COUNT)) {
-		log_error("csurface_example", "draw", NULL, "failed to draw rectangle");
 		gfx_end(&frame);
 		return 1;
 	}
@@ -269,6 +257,25 @@ static int draw(example_target_t *target, u64 now)
 	}
 	if (gfx_draw_indexed(&frame, EXAMPLE_CUBE_INDEX_COUNT)) {
 		log_error("csurface_example", "draw", NULL, "failed to draw cube");
+		gfx_end(&frame);
+		return 1;
+	}
+	if (gfx_pipeline_bind(&frame, &target->gui_pipeline) || gfx_buffer_bind(&frame, &target->vb)) {
+		log_error("csurface_example", "draw", NULL, "failed to bind GUI pipeline");
+		gfx_end(&frame);
+		return 1;
+	}
+	const gfx_resource_binding_t gui_resources[] = {
+		{.binding = 0, .type = GFX_RESOURCE_UNIFORM_BUFFER, .buffer = &target->gui_ub},
+	};
+	if (gfx_bind_resources(&frame, gui_resources, (u32)(sizeof(gui_resources) / sizeof(gui_resources[0]))) ||
+	    gfx_buffer_bind(&frame, &target->rect_ib)) {
+		log_error("csurface_example", "draw", NULL, "failed to bind rectangle draw state");
+		gfx_end(&frame);
+		return 1;
+	}
+	if (gfx_draw_indexed(&frame, EXAMPLE_RECT_INDEX_COUNT)) {
+		log_error("csurface_example", "draw", NULL, "failed to draw rectangle");
 		gfx_end(&frame);
 		return 1;
 	}
@@ -445,7 +452,8 @@ static void clear_target_graphics(example_target_t *target)
 	gfx_buffer_free(&target->gui_ub);
 	gfx_shader_free(&target->vs);
 	gfx_shader_free(&target->fs);
-	gfx_pipeline_free(&target->pipeline);
+	gfx_pipeline_free(&target->world_pipeline);
+	gfx_pipeline_free(&target->gui_pipeline);
 	gfx_framebuffer_free(&target->framebuffer);
 	gfx_swapchain_free(&target->swapchain);
 	target->frame_image = NULL;
@@ -711,8 +719,10 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 				 &target->gfx,
 				 &(gfx_render_pass_config_t){
 					 .color_format = target->frame_image->format,
+					 .depth_format = GFX_FORMAT_D32_FLOAT,
 					 .load	       = GFX_LOAD_CLEAR,
 					 .store	       = GFX_STORE_STORE,
+					 .depth_load   = GFX_LOAD_CLEAR,
 				 }) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize render pass for driver: %s", target->driver->name);
 		return 1;
@@ -729,8 +739,17 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.input_layout	   = input_layout,
 		.input_layout_size = sizeof(input_layout),
 	};
-	if (gfx_pipeline_init(&target->pipeline, &target->gfx, &pipeline_config) == NULL) {
-		log_error("csurface_example", "init", NULL, "failed to initialize pipeline for driver: %s", target->driver->name);
+	if (gfx_pipeline_init(&target->gui_pipeline, &target->gfx, &pipeline_config) == NULL) {
+		log_error("csurface_example", "init", NULL, "failed to initialize GUI pipeline for driver: %s", target->driver->name);
+		return 1;
+	}
+	pipeline_config.depth = (gfx_depth_state_t){
+		.test	 = 1,
+		.write	 = 1,
+		.compare = GFX_COMPARE_LESS,
+	};
+	if (gfx_pipeline_init(&target->world_pipeline, &target->gfx, &pipeline_config) == NULL) {
+		log_error("csurface_example", "init", NULL, "failed to initialize world pipeline for driver: %s", target->driver->name);
 		return 1;
 	}
 	return 0;

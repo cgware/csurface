@@ -28,6 +28,7 @@ typedef struct XVisualInfo_s {
 enum {
 	GLX_RGBA	 = 4,
 	GLX_DOUBLEBUFFER = 5,
+	GLX_DEPTH_SIZE	 = 12,
 };
 
 typedef struct glx_s {
@@ -236,6 +237,8 @@ static int surface_glx_config_window(surface_t *srf, window_config_t *config)
 	int attributes[] = {
 		GLX_RGBA,
 		GLX_DOUBLEBUFFER,
+		GLX_DEPTH_SIZE,
+		24,
 		0,
 	};
 	ctx->visual = ctx->glx.XChooseVisual(native.display, native.screen, attributes);
