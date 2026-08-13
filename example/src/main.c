@@ -23,6 +23,9 @@ enum {
 	EXAMPLE_CAMERA_MOUSE_SENSITIVITY = 3,
 };
 
+static const float EXAMPLE_CAMERA_NEAR_CLIP = 0.05f;
+static const float EXAMPLE_CAMERA_FAR_CLIP  = 100.0f;
+
 typedef struct example_transform_s {
 	mat4f_t model;
 	mat4f_t view;
@@ -144,7 +147,9 @@ static mat4f_t example_camera_view(const example_camera_t *camera)
 static mat4f_t example_projection(u16 width, u16 height)
 {
 	float aspect = height != 0 ? (float)width / (float)height : 1.0f;
-	return mat4f_frustum(-aspect, aspect, -1.0f, 1.0f, 1.0f, 100.0f);
+	float top    = EXAMPLE_CAMERA_NEAR_CLIP;
+	float right  = aspect * top;
+	return mat4f_frustum(-right, right, -top, top, EXAMPLE_CAMERA_NEAR_CLIP, EXAMPLE_CAMERA_FAR_CLIP);
 }
 
 static example_transform_t example_gui_transform(void)
