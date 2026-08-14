@@ -59,7 +59,8 @@ typedef struct example_target_s {
 	gfx_render_pass_t render_pass;
 	gfx_framebuffer_t framebuffer;
 	gfx_pipeline_t gui_pipeline;
-	gfx_pipeline_t world_pipeline;
+	gfx_pipeline_t world_pipeline_cull_off;
+	gfx_pipeline_t world_pipeline_cull_back;
 	gfx_swapchain_t swapchain;
 	gfx_image_t swapchain_images[8];
 	gfx_image_t *frame_image;
@@ -74,6 +75,7 @@ typedef struct example_target_s {
 	u64 fps_time;
 	u32 fps_frames;
 	u32 fps;
+	int backface_culling;
 	int redraw;
 	int open;
 	int initialized;
@@ -240,7 +242,8 @@ static int draw(example_target_t *target, u64 now)
 		log_error("csurface_example", "draw", NULL, "failed to begin render pass");
 		return 1;
 	}
-	if (gfx_pipeline_bind(&frame, &target->world_pipeline)) {
+	gfx_pipeline_t *world_pipeline = target->backface_culling ? &target->world_pipeline_cull_back : &target->world_pipeline_cull_off;
+	if (gfx_pipeline_bind(&frame, world_pipeline)) {
 		log_error("csurface_example", "draw", NULL, "failed to bind world pipeline");
 		gfx_end(&frame);
 		return 1;
@@ -457,7 +460,8 @@ static void clear_target_graphics(example_target_t *target)
 	gfx_buffer_free(&target->gui_ub);
 	gfx_shader_free(&target->vs);
 	gfx_shader_free(&target->fs);
-	gfx_pipeline_free(&target->world_pipeline);
+	gfx_pipeline_free(&target->world_pipeline_cull_back);
+	gfx_pipeline_free(&target->world_pipeline_cull_off);
 	gfx_pipeline_free(&target->gui_pipeline);
 	gfx_framebuffer_free(&target->framebuffer);
 	gfx_swapchain_free(&target->swapchain);
@@ -753,8 +757,21 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.write	 = 1,
 		.compare = GFX_COMPARE_LESS,
 	};
-	if (gfx_pipeline_init(&target->world_pipeline, &target->gfx, &pipeline_config) == NULL) {
+	pipeline_config.raster = (gfx_raster_state_t){
+		.front_face = GFX_WINDING_COUNTER_CLOCKWISE,
+		.cull	    = GFX_CULL_NONE,
+	};
+	if (gfx_pipeline_init(&target->world_pipeline_cull_off, &target->gfx, &pipeline_config) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize world pipeline for driver: %s", target->driver->name);
+		return 1;
+	}
+	pipeline_config.raster.cull = GFX_CULL_BACK;
+	if (gfx_pipeline_init(&target->world_pipeline_cull_back, &target->gfx, &pipeline_config) == NULL) {
+		log_error("csurface_example",
+			  "init",
+			  NULL,
+			  "failed to initialize culled world pipeline for driver: %s",
+			  target->driver->name);
 		return 1;
 	}
 	return 0;
@@ -765,7 +782,13 @@ static int restore_target_graphics(example_state_t *state, example_target_t *tar
 	if (state == NULL || target == NULL) {
 		return 1;
 	}
-	if (bind_target_graphics(state->display, state->proc, target, &target->window)) {
+
+	window_config_t config = {
+		.width	= target->width,
+		.height = target->height,
+	};
+	if (surface_config_window(&target->surface, &config) ||
+	    bind_target_graphics(state->display, state->proc, target, &target->window)) {
 		return 1;
 	}
 	return set_target_size(target, target->width, target->height);
@@ -798,7 +821,8 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	gfx_driver_t *old_driver = target->driver;
 	clear_target_graphics(target);
 	int target_initialized = init_target_graphics(state->display, state->proc, driver, target);
-	if (target_initialized <= 0 || bind_target_graphics(state->display, state->proc, target, &target->window) ||
+	if (target_initialized <= 0 || surface_config_window(&target->surface, &config) ||
+	    bind_target_graphics(state->display, state->proc, target, &target->window) ||
 	    set_target_size(target, target->width, target->height) || init_target_pipeline(target, state->shader_compiler)) {
 		clear_target_graphics(target);
 		if (init_target_graphics(state->display, state->proc, old_driver, target) <= 0 || restore_target_graphics(state, target) ||
@@ -1015,6 +1039,14 @@ static void on_event(display_t *display, const display_event_t *event, void *use
 				state->failed = 1;
 			}
 			return;
+		case DISPLAY_KEY_F2:
+			if (!target->open) {
+				return;
+			}
+
+			target->backface_culling = !target->backface_culling;
+			target->redraw		 = 1;
+			return;
 		default:
 			break;
 		}
@@ -1148,10 +1180,11 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, c
 	if (init_target_pipeline(target, compiler)) {
 		return fail_target_init(target);
 	}
-	target->id	    = window_id(&target->window);
-	target->redraw	    = 1;
-	target->open	    = 1;
-	target->initialized = 1;
+	target->id		 = window_id(&target->window);
+	target->backface_culling = 1;
+	target->redraw		 = 1;
+	target->open		 = 1;
+	target->initialized	 = 1;
 
 	return 1;
 }
