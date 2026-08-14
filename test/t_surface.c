@@ -21,6 +21,9 @@ static int t_surface_plan_ret;
 static int t_surface_plan_calls;
 static int t_surface_gfx_init_calls;
 static int t_surface_gfx_free_calls;
+static int t_surface_free_order;
+static int t_surface_gfx_free_order;
+static int t_surface_free_sequence;
 static int t_surface_gfx_init_ret;
 static gfx_api_t t_surface_compatible_gfx_api;
 static display_native_type_t t_surface_compatible_native_type;
@@ -38,7 +41,8 @@ static int t_surface_init(surface_t *srf, const surface_config_t *config)
 static int t_surface_free(surface_t *srf)
 {
 	t_surface_free_calls++;
-	srf->data = NULL;
+	t_surface_free_order = ++t_surface_free_sequence;
+	srf->data	     = NULL;
 	return t_surface_free_ret;
 }
 
@@ -111,7 +115,8 @@ static int t_surface_gfx_init(gfx_t *gfx, const gfx_config_t *config)
 static int t_surface_gfx_free(gfx_t *gfx)
 {
 	t_surface_gfx_free_calls++;
-	gfx->data = NULL;
+	t_surface_gfx_free_order = ++t_surface_free_sequence;
+	gfx->data		 = NULL;
 	return 0;
 }
 
@@ -177,6 +182,9 @@ static void t_surface_reset(void)
 	t_surface_plan_calls		 = 0;
 	t_surface_gfx_init_calls	 = 0;
 	t_surface_gfx_free_calls	 = 0;
+	t_surface_free_order		 = 0;
+	t_surface_gfx_free_order	 = 0;
+	t_surface_free_sequence		 = 0;
 	t_surface_gfx_init_ret		 = 0;
 	t_surface_compatible_gfx_api	 = GFX_API_OPENGL;
 	t_surface_compatible_native_type = DISPLAY_NATIVE_WINDOWS;
@@ -187,6 +195,46 @@ static void t_surface_reset(void)
 	t_surface_gfx.drv		 = &t_surface_gfx_driver;
 	t_surface_gfx.data		 = NULL;
 	t_surface_gfx_init_config	 = (gfx_config_t){0};
+}
+
+TEST(surface_gfx_free_uses_reverse_initialization_order)
+{
+	START;
+	t_surface_free_order	 = 0;
+	t_surface_gfx_free_order = 0;
+	t_surface_free_sequence	 = 0;
+
+	surface_t srf = {
+		.drv  = &t_surface_driver,
+		.data = (void *)0x1234,
+	};
+	gfx_t gfx = {
+		.drv  = &t_surface_gfx_driver,
+		.data = (void *)0x5678,
+	};
+
+	t_surface_driver.gfx_init_order = SURFACE_GFX_INIT_BEFORE_BIND;
+	surface_gfx_free(&srf, &gfx);
+	EXPECT_EQ(t_surface_free_order, 1);
+	EXPECT_EQ(t_surface_gfx_free_order, 2);
+
+	t_surface_free_order	 = 0;
+	t_surface_gfx_free_order = 0;
+	t_surface_free_sequence	 = 0;
+	srf			 = (surface_t){
+				     .drv  = &t_surface_driver,
+				     .data = (void *)0x1234,
+	     };
+	gfx = (gfx_t){
+		.drv  = &t_surface_gfx_driver,
+		.data = (void *)0x5678,
+	};
+	t_surface_driver.gfx_init_order = SURFACE_GFX_INIT_AFTER_BIND;
+	surface_gfx_free(&srf, &gfx);
+	EXPECT_EQ(t_surface_gfx_free_order, 1);
+	EXPECT_EQ(t_surface_free_order, 2);
+
+	END;
 }
 
 static surface_gfx_config_t t_surface_gfx_config(void)
@@ -854,6 +902,7 @@ STEST(surface)
 	RUN(surface_gfx_bind_unbinds_on_plan_failure);
 	RUN(surface_gfx_bind_unbinds_on_gfx_init_failure);
 	RUN(surface_gfx_bind_initializes_gfx_after_bind);
+	RUN(surface_gfx_free_uses_reverse_initialization_order);
 	RUN(surface_test_driver_disable);
 
 	SEND;

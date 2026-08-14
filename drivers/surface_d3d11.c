@@ -18,6 +18,7 @@ enum {
 	S_OK				   = 0,
 	DXGI_FORMAT_R8G8B8A8_UNORM	   = 28,
 	DXGI_USAGE_RENDER_TARGET_OUTPUT	   = 0x00000020,
+	DXGI_SWAP_EFFECT_DISCARD	   = 0,
 	DXGI_SWAP_EFFECT_FLIP_DISCARD	   = 4,
 	DXGI_SWAP_CHAIN_WINDOWED	   = 1,
 	DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING = 0x00000800,
@@ -126,6 +127,7 @@ typedef struct surface_d3d11_s {
 	gfx_surface_t gfx_surface;
 	PFN_CreateDXGIFactory CreateDXGIFactory;
 	int allow_tearing;
+	int flip_model;
 } surface_d3d11_t;
 
 static int hresult_ok(HRESULT hr)
@@ -277,6 +279,7 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 		}
 	}
 
+	ctx->flip_model		  = !srf->config.api_switching;
 	DXGI_SWAP_CHAIN_DESC desc = {
 		.BufferDesc =
 			{
@@ -290,8 +293,8 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 		.BufferCount  = srf->config.surface.image_count,
 		.OutputWindow = native_window.window,
 		.Windowed     = DXGI_SWAP_CHAIN_WINDOWED,
-		.SwapEffect   = DXGI_SWAP_EFFECT_FLIP_DISCARD,
-		.Flags	      = ctx->allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0,
+		.SwapEffect   = ctx->flip_model ? DXGI_SWAP_EFFECT_FLIP_DISCARD : DXGI_SWAP_EFFECT_DISCARD,
+		.Flags	      = ctx->flip_model && ctx->allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0,
 	};
 
 	if (!hresult_ok(factory->CreateSwapChain(ctx->factory, (void *)(uintptr_t)native_gfx.device, &desc, &ctx->swapchain)) ||
@@ -300,11 +303,14 @@ static int surface_d3d11_bind(surface_t *srf, window_t *window)
 		surface_d3d11_unbind(srf);
 		return 1;
 	}
-	IDXGISwapChainVTable *swap = *(IDXGISwapChainVTable **)ctx->swapchain;
-	if (!hresult_ok(swap->QueryInterface(ctx->swapchain, &IID_IDXGISwapChain3, (void **)&ctx->swapchain3)) || ctx->swapchain3 == NULL) {
-		log_error("csurface", "surface_d3d11", NULL, "failed to get DXGI 1.4 swapchain interface");
-		surface_d3d11_unbind(srf);
-		return 1;
+	if (ctx->flip_model) {
+		IDXGISwapChainVTable *swap = *(IDXGISwapChainVTable **)ctx->swapchain;
+		if (!hresult_ok(swap->QueryInterface(ctx->swapchain, &IID_IDXGISwapChain3, (void **)&ctx->swapchain3)) ||
+		    ctx->swapchain3 == NULL) {
+			log_error("csurface", "surface_d3d11", NULL, "failed to get DXGI 1.4 swapchain interface");
+			surface_d3d11_unbind(srf);
+			return 1;
+		}
 	}
 
 	ctx->gfx_surface = (gfx_surface_t){
@@ -322,7 +328,8 @@ static int surface_d3d11_gfx_present_mode(gfx_surface_t *surface, gfx_present_mo
 		return 1;
 	}
 	surface_d3d11_t *ctx = surface->data;
-	*actual = requested == GFX_PRESENT_MODE_IMMEDIATE && ctx->allow_tearing ? GFX_PRESENT_MODE_IMMEDIATE : GFX_PRESENT_MODE_VSYNC;
+	*actual = requested == GFX_PRESENT_MODE_IMMEDIATE && (!ctx->flip_model || ctx->allow_tearing) ? GFX_PRESENT_MODE_IMMEDIATE
+												      : GFX_PRESENT_MODE_VSYNC;
 	return 0;
 }
 
@@ -336,7 +343,7 @@ static int surface_d3d11_gfx_configure(gfx_surface_t *surface, const gfx_surface
 		return 1;
 	}
 	IDXGISwapChainVTable *swap = *(IDXGISwapChainVTable **)ctx->swapchain;
-	UINT flags		   = ctx->allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+	UINT flags		   = ctx->flip_model && ctx->allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
 	return hresult_ok(swap->ResizeBuffers(ctx->swapchain, 0, config->width, config->height, 0, flags)) ? 0 : 1;
 }
 
@@ -348,8 +355,9 @@ static int surface_d3d11_gfx_present(gfx_surface_t *surface, gfx_present_mode_t 
 
 	surface_d3d11_t *ctx	   = surface->data;
 	IDXGISwapChainVTable *swap = *(IDXGISwapChainVTable **)ctx->swapchain;
-	UINT immediate		   = present_mode == GFX_PRESENT_MODE_IMMEDIATE && ctx->allow_tearing;
-	return hresult_ok(swap->Present(ctx->swapchain, immediate ? 0 : 1, immediate ? DXGI_PRESENT_ALLOW_TEARING : 0)) ? 0 : 1;
+	UINT immediate		   = present_mode == GFX_PRESENT_MODE_IMMEDIATE;
+	UINT flags		   = immediate && ctx->flip_model && ctx->allow_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0;
+	return hresult_ok(swap->Present(ctx->swapchain, immediate ? 0 : 1, flags)) ? 0 : 1;
 }
 
 static int surface_d3d11_gfx_acquire(gfx_surface_t *surface, u32 *image_index)
@@ -359,6 +367,10 @@ static int surface_d3d11_gfx_acquire(gfx_surface_t *surface, u32 *image_index)
 	}
 
 	surface_d3d11_t *ctx = surface->data;
+	if (!ctx->flip_model) {
+		*image_index = 0;
+		return 0;
+	}
 	if (ctx->swapchain3 == NULL) {
 		return 1;
 	}

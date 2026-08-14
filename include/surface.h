@@ -32,12 +32,14 @@ typedef struct surface_config_s {
 	gfx_t *gfx;
 	gfx_api_t gfx_api;
 	gfx_surface_config_t surface;
+	int api_switching;
 } surface_config_t;
 
 typedef struct surface_gfx_config_s {
 	display_t *display;
 	const struct gfx_driver_s *driver;
 	gfx_surface_config_t surface;
+	int api_switching;
 } surface_gfx_config_t;
 
 typedef struct surface_s {
@@ -52,6 +54,7 @@ int surface_plan(surface_plan_t *plan, const surface_plan_config_t *config);
 int surface_gfx_supported(const surface_gfx_config_t *config);
 int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *config, proc_t *proc, alloc_t alloc);
 int surface_gfx_bind(surface_t *srf, gfx_t *gfx, window_t *window, const surface_gfx_config_t *config, proc_t *proc, alloc_t alloc);
+void surface_gfx_free(surface_t *srf, gfx_t *gfx);
 
 surface_t *surface_init(surface_t *srf, const surface_config_t *config, alloc_t alloc);
 void surface_free(surface_t *srf);

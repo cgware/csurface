@@ -174,9 +174,10 @@ int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *con
 		return surface_init_driver(srf,
 					   drv,
 					   &(surface_config_t){
-						   .display = config->display,
-						   .gfx_api = config->driver->api,
-						   .surface = config->surface,
+						   .display	  = config->display,
+						   .gfx_api	  = config->driver->api,
+						   .surface	  = config->surface,
+						   .api_switching = config->api_switching,
 					   },
 					   alloc) == NULL;
 	}
@@ -193,9 +194,10 @@ int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *con
 	if (surface_init_driver(srf,
 				drv,
 				&(surface_config_t){
-					.display = config->display,
-					.gfx	 = gfx,
-					.surface = config->surface,
+					.display       = config->display,
+					.gfx	       = gfx,
+					.surface       = config->surface,
+					.api_switching = config->api_switching,
 				},
 				alloc) == NULL) {
 		gfx_free(gfx);
@@ -242,6 +244,18 @@ int surface_gfx_bind(surface_t *srf, gfx_t *gfx, window_t *window, const surface
 
 	srf->config.gfx = gfx;
 	return 0;
+}
+
+void surface_gfx_free(surface_t *srf, gfx_t *gfx)
+{
+	if (srf != NULL && srf->drv != NULL && srf->drv->gfx_init_order == SURFACE_GFX_INIT_AFTER_BIND) {
+		gfx_free(gfx);
+		surface_free(srf);
+		return;
+	}
+
+	surface_free(srf);
+	gfx_free(gfx);
 }
 
 void surface_free(surface_t *srf)

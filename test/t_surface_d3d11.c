@@ -109,6 +109,7 @@ typedef struct t_surface_d3d11_data_s {
 	gfx_surface_t gfx_surface;
 	void *CreateDXGIFactory;
 	int allow_tearing;
+	int flip_model;
 } t_surface_d3d11_data_t;
 
 static int t_create_factory_calls;
@@ -863,6 +864,42 @@ TEST(surface_d3d11_bind_creates_swapchain)
 	END;
 }
 
+TEST(surface_d3d11_api_switching_uses_bitblt_swapchain)
+{
+	START;
+
+	t_surface_d3d11_reset();
+	t_query_swapchain3_ret = -1;
+	t_back_buffer_index    = 2;
+	surface_t surface      = {0};
+	EXPECT_EQ(t_surface_d3d11_init_surface(&surface), 0);
+	surface.config.api_switching = 1;
+	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
+	EXPECT_EQ(t_create_swapchain_swap_effect, 0);
+	EXPECT_EQ(t_create_swapchain_flags, 0);
+	EXPECT_EQ(t_query_swapchain3_calls, 0);
+
+	surface_native_t native = {0};
+	EXPECT_EQ(surface_native(&surface, &native), 0);
+	u32 index = 1;
+	EXPECT_EQ(native.gfx_surface->ops->acquire(native.gfx_surface, &index), 0);
+	EXPECT_EQ(index, 0);
+
+	gfx_present_mode_t actual = GFX_PRESENT_MODE_DEFAULT;
+	EXPECT_EQ(native.gfx_surface->ops->present_mode(native.gfx_surface, GFX_PRESENT_MODE_IMMEDIATE, &actual), 0);
+	EXPECT_EQ(actual, GFX_PRESENT_MODE_IMMEDIATE);
+	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, actual), 0);
+	EXPECT_EQ(t_present_sync_interval, 0);
+	EXPECT_EQ(t_present_flags, 0);
+
+	EXPECT_EQ(native.gfx_surface->ops->configure(native.gfx_surface, &(gfx_surface_config_t){.width = 800, .height = 600}), 0);
+	EXPECT_EQ(t_resize_flags, 0);
+
+	surface_free(&surface);
+	t_surface_d3d11_cleanup();
+	END;
+}
+
 TEST(surface_d3d11_bind_replaces_swapchain)
 {
 	START;
@@ -1092,7 +1129,7 @@ TEST(surface_d3d11_gfx_acquire_requires_swapchain3)
 	surface_native_t native = {0};
 	EXPECT_EQ(surface_native(&surface, &native), 0);
 
-	t_surface_d3d11_data_t ctx = {0};
+	t_surface_d3d11_data_t ctx = {.flip_model = 1};
 	gfx_surface_t fake	   = {.data = &ctx};
 	u32 index		   = 0;
 	EXPECT_EQ(native.gfx_surface->ops->acquire(&fake, &index), 1);
@@ -1218,6 +1255,7 @@ STEST(surface_d3d11)
 	RUN(surface_d3d11_bind_query_swapchain3_failure);
 	RUN(surface_d3d11_bind_query_swapchain3_null);
 	RUN(surface_d3d11_bind_creates_swapchain);
+	RUN(surface_d3d11_api_switching_uses_bitblt_swapchain);
 	RUN(surface_d3d11_bind_replaces_swapchain);
 	RUN(surface_d3d11_native_returns_surface);
 	RUN(surface_d3d11_native_without_bind);

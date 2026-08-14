@@ -467,17 +467,17 @@ static void clear_target_graphics(example_target_t *target)
 	gfx_buffer_free(&target->gui_ub);
 	gfx_shader_free(&target->vs);
 	gfx_shader_free(&target->fs);
-	surface_free(&target->surface);
-	gfx_free(&target->gfx);
+	surface_gfx_free(&target->surface, &target->gfx);
 	target->driver = NULL;
 }
 
 static surface_gfx_config_t target_graphics_config(display_t *display, gfx_driver_t *driver, u32 image_count)
 {
 	return (surface_gfx_config_t){
-		.display = display,
-		.driver	 = driver,
-		.surface = {.image_count = image_count},
+		.display       = display,
+		.driver	       = driver,
+		.surface       = {.image_count = image_count},
+		.api_switching = 1,
 	};
 }
 
