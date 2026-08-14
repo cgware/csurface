@@ -453,13 +453,6 @@ static void clear_target_graphics(example_target_t *target)
 		return;
 	}
 
-	gfx_buffer_free(&target->cube_ib);
-	gfx_buffer_free(&target->rect_ib);
-	gfx_buffer_free(&target->vb);
-	gfx_buffer_free(&target->world_ub);
-	gfx_buffer_free(&target->gui_ub);
-	gfx_shader_free(&target->vs);
-	gfx_shader_free(&target->fs);
 	gfx_pipeline_free(&target->world_pipeline_cull_back);
 	gfx_pipeline_free(&target->world_pipeline_cull_off);
 	gfx_pipeline_free(&target->gui_pipeline);
@@ -467,6 +460,13 @@ static void clear_target_graphics(example_target_t *target)
 	gfx_swapchain_free(&target->swapchain);
 	target->frame_image = NULL;
 	gfx_render_pass_free(&target->render_pass);
+	gfx_buffer_free(&target->cube_ib);
+	gfx_buffer_free(&target->rect_ib);
+	gfx_buffer_free(&target->vb);
+	gfx_buffer_free(&target->world_ub);
+	gfx_buffer_free(&target->gui_ub);
+	gfx_shader_free(&target->vs);
+	gfx_shader_free(&target->fs);
 	surface_free(&target->surface);
 	gfx_free(&target->gfx);
 	target->driver = NULL;
@@ -572,9 +572,6 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 {
 	if (target == NULL || target->driver == NULL) {
 		return 1;
-	}
-	if (target->vs.data != NULL) {
-		return 0;
 	}
 	example_vertex_t vertices[] = {
 		{-0.95f, 0.95f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f},
