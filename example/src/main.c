@@ -76,6 +76,7 @@ typedef struct example_target_s {
 	u32 fps_frames;
 	u32 fps;
 	int backface_culling;
+	int vsync;
 	int redraw;
 	int open;
 	int initialized;
@@ -406,6 +407,11 @@ static int draw_all(example_target_t *targets, u32 count)
 	return 0;
 }
 
+static gfx_present_mode_t target_present_mode(const example_target_t *target)
+{
+	return target != NULL && target->vsync ? GFX_PRESENT_MODE_VSYNC : GFX_PRESENT_MODE_IMMEDIATE;
+}
+
 static int set_target_size(example_target_t *target, u16 width, u16 height)
 {
 	if (target == NULL || width == 0 || height == 0) {
@@ -432,7 +438,7 @@ static int set_target_size(example_target_t *target, u16 width, u16 height)
 		.surface	 = native.gfx_surface,
 		.width		 = width,
 		.height		 = height,
-		.present_mode	 = GFX_PRESENT_MODE_IMMEDIATE,
+		.present_mode	 = target_present_mode(target),
 		.images		 = target->swapchain_images,
 		.min_image_count = EXAMPLE_SWAPCHAIN_IMAGE_COUNT,
 		.image_capacity	 = sizeof(target->swapchain_images) / sizeof(target->swapchain_images[0]),
@@ -469,6 +475,18 @@ static void clear_target_graphics(example_target_t *target)
 	gfx_shader_free(&target->fs);
 	surface_gfx_free(&target->surface, &target->gfx);
 	target->driver = NULL;
+}
+
+static int set_target_present_mode(example_target_t *target, gfx_present_mode_t present_mode)
+{
+	if (target == NULL || target->swapchain.gfx == NULL) {
+		return 1;
+	}
+
+	if (gfx_swapchain_set_present_mode(&target->swapchain, present_mode)) {
+		return 1;
+	}
+	return 0;
 }
 
 static surface_gfx_config_t target_graphics_config(display_t *display, gfx_driver_t *driver, u32 image_count)
@@ -1043,6 +1061,24 @@ static void on_event(display_t *display, const display_event_t *event, void *use
 
 			target->backface_culling = !target->backface_culling;
 			target->redraw		 = 1;
+			return;
+		case DISPLAY_KEY_F3:
+			if (!target->open) {
+				return;
+			}
+
+			target->vsync = !target->vsync;
+			if (set_target_present_mode(target, target_present_mode(target))) {
+				target->vsync = !target->vsync;
+				log_error("csurface_example",
+					  "event",
+					  NULL,
+					  "failed to set present mode for graphics driver: %s",
+					  target->driver->name);
+				state->failed = 1;
+				return;
+			}
+			target->redraw = 1;
 			return;
 		default:
 			break;
