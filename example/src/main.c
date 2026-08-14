@@ -23,6 +23,18 @@ enum {
 	EXAMPLE_CAMERA_MOUSE_SENSITIVITY = 3,
 };
 
+typedef enum example_world_fill_e {
+	EXAMPLE_WORLD_FILL_SOLID,
+	EXAMPLE_WORLD_FILL_WIREFRAME,
+	EXAMPLE_WORLD_FILL_COUNT,
+} example_world_fill_t;
+
+typedef enum example_world_cull_e {
+	EXAMPLE_WORLD_CULL_NONE,
+	EXAMPLE_WORLD_CULL_BACK,
+	EXAMPLE_WORLD_CULL_COUNT,
+} example_world_cull_t;
+
 static const float EXAMPLE_CAMERA_NEAR_CLIP = 0.05f;
 static const float EXAMPLE_CAMERA_FAR_CLIP  = 100.0f;
 
@@ -59,10 +71,7 @@ typedef struct example_target_s {
 	gfx_render_pass_t render_pass;
 	gfx_framebuffer_t framebuffer;
 	gfx_pipeline_t gui_pipeline;
-	gfx_pipeline_t world_pipeline_solid_cull_off;
-	gfx_pipeline_t world_pipeline_solid_cull_back;
-	gfx_pipeline_t world_pipeline_wire_cull_off;
-	gfx_pipeline_t world_pipeline_wire_cull_back;
+	gfx_pipeline_t world_pipeline[EXAMPLE_WORLD_FILL_COUNT][EXAMPLE_WORLD_CULL_COUNT];
 	gfx_swapchain_t swapchain;
 	gfx_image_t swapchain_images[8];
 	gfx_image_t *frame_image;
@@ -220,15 +229,32 @@ static int update_target_camera(example_target_t *target, u64 now)
 	return 0;
 }
 
+static example_world_fill_t target_world_fill(const example_target_t *target)
+{
+	return target != NULL && target->wireframe ? EXAMPLE_WORLD_FILL_WIREFRAME : EXAMPLE_WORLD_FILL_SOLID;
+}
+
+static example_world_cull_t target_world_cull(const example_target_t *target)
+{
+	return target != NULL && target->backface_culling ? EXAMPLE_WORLD_CULL_BACK : EXAMPLE_WORLD_CULL_NONE;
+}
+
+static gfx_fill_mode_t world_fill_mode(example_world_fill_t fill)
+{
+	return fill == EXAMPLE_WORLD_FILL_WIREFRAME ? GFX_FILL_WIREFRAME : GFX_FILL_SOLID;
+}
+
+static gfx_cull_mode_t world_cull_mode(example_world_cull_t cull)
+{
+	return cull == EXAMPLE_WORLD_CULL_BACK ? GFX_CULL_BACK : GFX_CULL_NONE;
+}
+
 static gfx_pipeline_t *target_world_pipeline(example_target_t *target)
 {
 	if (target == NULL) {
 		return NULL;
 	}
-	if (target->wireframe) {
-		return target->backface_culling ? &target->world_pipeline_wire_cull_back : &target->world_pipeline_wire_cull_off;
-	}
-	return target->backface_culling ? &target->world_pipeline_solid_cull_back : &target->world_pipeline_solid_cull_off;
+	return &target->world_pipeline[target_world_fill(target)][target_world_cull(target)];
 }
 
 static int draw(example_target_t *target, u64 now)
@@ -474,10 +500,11 @@ static void clear_target_graphics(example_target_t *target)
 		return;
 	}
 
-	gfx_pipeline_free(&target->world_pipeline_wire_cull_back);
-	gfx_pipeline_free(&target->world_pipeline_wire_cull_off);
-	gfx_pipeline_free(&target->world_pipeline_solid_cull_back);
-	gfx_pipeline_free(&target->world_pipeline_solid_cull_off);
+	for (example_world_fill_t fill = 0; fill < EXAMPLE_WORLD_FILL_COUNT; fill++) {
+		for (example_world_cull_t cull = 0; cull < EXAMPLE_WORLD_CULL_COUNT; cull++) {
+			gfx_pipeline_free(&target->world_pipeline[fill][cull]);
+		}
+	}
 	gfx_pipeline_free(&target->gui_pipeline);
 	gfx_framebuffer_free(&target->framebuffer);
 	gfx_swapchain_free(&target->swapchain);
@@ -506,19 +533,19 @@ static int set_target_present_mode(example_target_t *target, gfx_present_mode_t 
 	return 0;
 }
 
-static int init_world_pipeline(example_target_t *target, gfx_pipeline_t *pipeline, gfx_pipeline_config_t *config, gfx_fill_mode_t fill,
-			       gfx_cull_mode_t cull)
+static int init_world_pipeline(example_target_t *target, gfx_pipeline_config_t *config, example_world_fill_t fill,
+			       example_world_cull_t cull)
 {
-	if (target == NULL || pipeline == NULL || config == NULL) {
+	if (target == NULL || config == NULL) {
 		return 1;
 	}
 
 	config->raster = (gfx_raster_state_t){
 		.front_face = GFX_WINDING_COUNTER_CLOCKWISE,
-		.cull	    = cull,
-		.fill	    = fill,
+		.cull	    = world_cull_mode(cull),
+		.fill	    = world_fill_mode(fill),
 	};
-	if (gfx_pipeline_init(pipeline, &target->gfx, config) == NULL) {
+	if (gfx_pipeline_init(&target->world_pipeline[fill][cull], &target->gfx, config) == NULL) {
 		return 1;
 	}
 	return 0;
@@ -807,24 +834,27 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.write	 = 1,
 		.compare = GFX_COMPARE_LESS,
 	};
-	if (init_world_pipeline(target, &target->world_pipeline_solid_cull_off, &pipeline_config, GFX_FILL_SOLID, GFX_CULL_NONE)) {
-		log_error("csurface_example", "init", NULL, "failed to initialize world pipeline for driver: %s", target->driver->name);
-		return 1;
+	for (example_world_cull_t cull = 0; cull < EXAMPLE_WORLD_CULL_COUNT; cull++) {
+		if (init_world_pipeline(target, &pipeline_config, EXAMPLE_WORLD_FILL_SOLID, cull)) {
+			log_error("csurface_example",
+				  "init",
+				  NULL,
+				  "failed to initialize world pipeline for driver: %s",
+				  target->driver->name);
+			return 1;
+		}
 	}
-	if (init_world_pipeline(target, &target->world_pipeline_solid_cull_back, &pipeline_config, GFX_FILL_SOLID, GFX_CULL_BACK)) {
-		log_error("csurface_example",
-			  "init",
-			  NULL,
-			  "failed to initialize culled world pipeline for driver: %s",
-			  target->driver->name);
-		return 1;
+	target->wireframe_supported = 1;
+	for (example_world_cull_t cull = 0; cull < EXAMPLE_WORLD_CULL_COUNT; cull++) {
+		if (init_world_pipeline(target, &pipeline_config, EXAMPLE_WORLD_FILL_WIREFRAME, cull)) {
+			target->wireframe_supported = 0;
+			break;
+		}
 	}
-	target->wireframe_supported =
-		!init_world_pipeline(target, &target->world_pipeline_wire_cull_off, &pipeline_config, GFX_FILL_WIREFRAME, GFX_CULL_NONE) &&
-		!init_world_pipeline(target, &target->world_pipeline_wire_cull_back, &pipeline_config, GFX_FILL_WIREFRAME, GFX_CULL_BACK);
 	if (!target->wireframe_supported) {
-		gfx_pipeline_free(&target->world_pipeline_wire_cull_back);
-		gfx_pipeline_free(&target->world_pipeline_wire_cull_off);
+		for (example_world_cull_t cull = 0; cull < EXAMPLE_WORLD_CULL_COUNT; cull++) {
+			gfx_pipeline_free(&target->world_pipeline[EXAMPLE_WORLD_FILL_WIREFRAME][cull]);
+		}
 		target->wireframe = 0;
 		log_warn("csurface_example", "init", NULL, "wireframe mode is not supported for driver: %s", target->driver->name);
 	}
