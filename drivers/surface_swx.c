@@ -67,6 +67,20 @@ typedef struct swx_s {
 	int (*Flush)(Display *);
 } swx_t;
 
+typedef struct surface_swx_channel_s {
+	unsigned int shift;
+	unsigned int bits;
+	unsigned long max;
+} surface_swx_channel_t;
+
+typedef struct surface_swx_format_s {
+	surface_swx_channel_t red;
+	surface_swx_channel_t green;
+	surface_swx_channel_t blue;
+	u32 byte_count;
+	int lsb_first;
+} surface_swx_format_t;
+
 typedef struct surface_swx_s {
 	proc_t *proc;
 	alloc_t alloc;
@@ -85,6 +99,7 @@ typedef struct surface_swx_s {
 	u16 width;
 	u16 height;
 	XImage *image;
+	surface_swx_format_t format;
 	gfx_surface_t gfx_surface;
 } surface_swx_t;
 
@@ -169,6 +184,7 @@ static void surface_swx_free_image(surface_swx_t *ctx)
 	ctx->width	 = 0;
 	ctx->height	 = 0;
 	ctx->image	 = NULL;
+	ctx->format	 = (surface_swx_format_t){0};
 }
 
 static int surface_swx_unbind(surface_t *srf)
@@ -293,24 +309,40 @@ static unsigned int mask_bits(unsigned long mask)
 	return bits;
 }
 
-static unsigned long channel_pixel(u8 value, unsigned long mask)
+static surface_swx_channel_t surface_swx_channel(unsigned long mask)
 {
-	unsigned int shift = mask_shift(mask);
-	unsigned int bits  = mask_bits(mask);
-	if (bits == 0) {
-		return 0;
-	}
-
-	unsigned long max = bits >= sizeof(unsigned long) * 8 ? ~0ul : (1ul << bits) - 1ul;
-	return ((unsigned long)value * max / 255ul) << shift;
+	unsigned int bits = mask_bits(mask);
+	return (surface_swx_channel_t){
+		.shift = mask_shift(mask),
+		.bits  = bits,
+		.max   = bits >= sizeof(unsigned long) * 8 ? ~0ul : (1ul << bits) - 1ul,
+	};
 }
 
-static void surface_swx_write_pixel(XImage *image, size_t offset, unsigned long pixel)
+static surface_swx_format_t surface_swx_format(const XImage *image)
 {
-	u8 *data       = (u8 *)image->data + offset;
-	u32 byte_count = (u32)(image->bits_per_pixel + 7) / 8;
-	for (u32 i = 0; i < byte_count; i++) {
-		u32 byte   = image->byte_order == X_LSB_FIRST ? i : byte_count - i - 1;
+	return (surface_swx_format_t){
+		.red	    = surface_swx_channel(image->red_mask),
+		.green	    = surface_swx_channel(image->green_mask),
+		.blue	    = surface_swx_channel(image->blue_mask),
+		.byte_count = (u32)(image->bits_per_pixel + 7) / 8,
+		.lsb_first  = image->byte_order == X_LSB_FIRST,
+	};
+}
+
+static unsigned long surface_swx_channel_pixel(u8 value, const surface_swx_channel_t *channel)
+{
+	if (channel->bits == 0) {
+		return 0;
+	}
+	return ((unsigned long)value * channel->max / 255ul) << channel->shift;
+}
+
+static void surface_swx_write_pixel(const surface_swx_format_t *format, void *image_data, size_t offset, unsigned long pixel)
+{
+	u8 *data = (u8 *)image_data + offset;
+	for (u32 i = 0; i < format->byte_count; i++) {
+		u32 byte   = format->lsb_first ? i : format->byte_count - i - 1;
 		data[byte] = (u8)(pixel >> (i * 8));
 	}
 }
@@ -320,10 +352,13 @@ static void surface_swx_convert(surface_swx_t *ctx)
 	for (u16 y = 0; y < ctx->height; y++) {
 		const u8 *src = ctx->pixels + (size_t)y * ctx->width * 4;
 		for (u16 x = 0; x < ctx->width; x++) {
-			unsigned long pixel = channel_pixel(src[0], ctx->image->red_mask) | channel_pixel(src[1], ctx->image->green_mask) |
-					      channel_pixel(src[2], ctx->image->blue_mask);
-			surface_swx_write_pixel(
-				ctx->image, (size_t)y * ctx->image->bytes_per_line + (size_t)x * ctx->image->bits_per_pixel / 8, pixel);
+			unsigned long pixel = surface_swx_channel_pixel(src[0], &ctx->format.red) |
+					      surface_swx_channel_pixel(src[1], &ctx->format.green) |
+					      surface_swx_channel_pixel(src[2], &ctx->format.blue);
+			surface_swx_write_pixel(&ctx->format,
+						ctx->image_data,
+						(size_t)y * ctx->image->bytes_per_line + (size_t)x * ctx->format.byte_count,
+						pixel);
 			src += 4;
 		}
 	}
@@ -394,6 +429,7 @@ static int surface_swx_gfx_memory(gfx_surface_t *surface, gfx_surface_memory_t *
 	ctx->width	 = memory->width;
 	ctx->height	 = memory->height;
 	ctx->image	 = image;
+	ctx->format	 = surface_swx_format(image);
 
 	memory->format = GFX_FORMAT_RGBA8;
 	memory->data   = ctx->pixels;

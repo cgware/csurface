@@ -713,7 +713,7 @@ TEST(surface_wsw_native_rejects_unbound_surface)
 	END;
 }
 
-TEST(surface_wsw_memory_allocates_rgba_pixels)
+TEST(surface_wsw_memory_exposes_bgra_dib_pixels)
 {
 	START;
 
@@ -723,8 +723,8 @@ TEST(surface_wsw_memory_allocates_rgba_pixels)
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 
 	EXPECT_EQ(t_surface_wsw_memory(&surface, &memory), 0);
-	EXPECT_EQ(memory.format, GFX_FORMAT_RGBA8);
-	EXPECT_NOT_NULL(memory.data);
+	EXPECT_EQ(memory.format, GFX_FORMAT_BGRA8_UNORM);
+	EXPECT_PTR(memory.data, t_wsw_bitmap_pixels);
 	EXPECT_EQ(memory.stride, 8);
 	EXPECT_EQ(t_wsw_create_compatible_dc_calls, 1);
 	EXPECT_EQ(t_wsw_create_dib_section_calls, 1);
@@ -785,35 +785,6 @@ TEST(surface_wsw_memory_rejects_unbound_surface)
 	EXPECT_EQ(surface_unbind(&surface), 0);
 
 	EXPECT_EQ(gfx_surface.ops->memory(&gfx_surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
-
-	t_surface_wsw_close(&surface);
-	END;
-}
-
-TEST(surface_wsw_memory_pixels_alloc_failure)
-{
-	START;
-
-	t_surface_wsw_reset();
-	t_alloc_fail_at = 2;
-	proc_init(&t_proc, 0, 1, ALLOC_STD);
-	t_surface_wsw_symbols(&t_proc);
-	t_display	  = (display_t){.drv = &t_surface_wsw_display_driver, .proc = &t_proc};
-	t_gfx		  = (gfx_t){.drv = &t_surface_wsw_gfx_driver};
-	surface_t surface = {0};
-	EXPECT_PTR(surface_init(&surface,
-				&(surface_config_t){
-					.display = &t_display,
-					.gfx	 = &t_gfx,
-				},
-				(alloc_t){.alloc = t_surface_wsw_alloc, .free = alloc_free_std}),
-		   &surface);
-	t_window = (window_t){.display = &t_display};
-	EXPECT_EQ(surface_bind(&surface, &t_window), 0);
-
-	log_set_quiet(0, 1);
-	EXPECT_EQ(t_surface_wsw_memory(&surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
-	log_set_quiet(0, 0);
 
 	t_surface_wsw_close(&surface);
 	END;
@@ -891,7 +862,7 @@ TEST(surface_wsw_memory_select_object_failure)
 	END;
 }
 
-TEST(surface_wsw_present_converts_rgba_to_bgra)
+TEST(surface_wsw_present_blits_bgra_dib_pixels)
 {
 	START;
 
@@ -911,18 +882,19 @@ TEST(surface_wsw_present_converts_rgba_to_bgra)
 	pixels[6]  = 0x77;
 	pixels[7]  = 0x88;
 	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_PTR(memory.data, t_wsw_bitmap_pixels);
 
 	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 0);
 	EXPECT_EQ(t_wsw_bit_blt_calls, 1);
 	EXPECT_EQ(t_wsw_bit_blt_width, 2);
 	EXPECT_EQ(t_wsw_bit_blt_height, 2);
-	EXPECT_EQ(t_wsw_bitmap_pixels[0], 0x33);
+	EXPECT_EQ(t_wsw_bitmap_pixels[0], 0x11);
 	EXPECT_EQ(t_wsw_bitmap_pixels[1], 0x22);
-	EXPECT_EQ(t_wsw_bitmap_pixels[2], 0x11);
+	EXPECT_EQ(t_wsw_bitmap_pixels[2], 0x33);
 	EXPECT_EQ(t_wsw_bitmap_pixels[3], 0x44);
-	EXPECT_EQ(t_wsw_bitmap_pixels[4], 0x77);
+	EXPECT_EQ(t_wsw_bitmap_pixels[4], 0x55);
 	EXPECT_EQ(t_wsw_bitmap_pixels[5], 0x66);
-	EXPECT_EQ(t_wsw_bitmap_pixels[6], 0x55);
+	EXPECT_EQ(t_wsw_bitmap_pixels[6], 0x77);
 	EXPECT_EQ(t_wsw_bitmap_pixels[7], 0x88);
 
 	t_surface_wsw_close(&surface);
@@ -1027,16 +999,15 @@ STEST(surface_wsw)
 	RUN(surface_wsw_bind_success);
 	RUN(surface_wsw_native_rejects_invalid_arguments);
 	RUN(surface_wsw_native_rejects_unbound_surface);
-	RUN(surface_wsw_memory_allocates_rgba_pixels);
+	RUN(surface_wsw_memory_exposes_bgra_dib_pixels);
 	RUN(surface_wsw_memory_reuses_matching_bitmap);
 	RUN(surface_wsw_memory_rejects_invalid_arguments);
 	RUN(surface_wsw_memory_rejects_unbound_surface);
-	RUN(surface_wsw_memory_pixels_alloc_failure);
 	RUN(surface_wsw_memory_create_dc_failure);
 	RUN(surface_wsw_memory_create_dib_section_failure);
 	RUN(surface_wsw_memory_create_dib_section_null_bits);
 	RUN(surface_wsw_memory_select_object_failure);
-	RUN(surface_wsw_present_converts_rgba_to_bgra);
+	RUN(surface_wsw_present_blits_bgra_dib_pixels);
 	RUN(surface_wsw_present_rejects_invalid_arguments);
 	RUN(surface_wsw_present_bit_blt_failure);
 	RUN(surface_wsw_unbind_releases_gdi_objects);

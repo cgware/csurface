@@ -68,9 +68,7 @@ typedef struct surface_wsw_s {
 	HDC memory_dc;
 	HBITMAP bitmap;
 	HGDIOBJ old_bitmap;
-	u8 *pixels;
 	u8 *bitmap_pixels;
-	size_t pixels_size;
 	u16 width;
 	u16 height;
 	gfx_surface_t gfx_surface;
@@ -164,16 +162,10 @@ static void surface_wsw_free_bitmap(surface_wsw_t *ctx)
 	if (ctx->memory_dc != NULL) {
 		ctx->wsw.DeleteDC(ctx->memory_dc);
 	}
-	if (ctx->pixels != NULL) {
-		alloc_free(&ctx->alloc, ctx->pixels, ctx->pixels_size);
-	}
-
 	ctx->memory_dc	   = NULL;
 	ctx->bitmap	   = NULL;
 	ctx->old_bitmap	   = NULL;
-	ctx->pixels	   = NULL;
 	ctx->bitmap_pixels = NULL;
-	ctx->pixels_size   = 0;
 	ctx->width	   = 0;
 	ctx->height	   = 0;
 }
@@ -333,51 +325,22 @@ static int surface_wsw_gfx_memory(gfx_surface_t *surface, gfx_surface_memory_t *
 	}
 
 	if (ctx->bitmap != NULL && ctx->width == memory->width && ctx->height == memory->height) {
-		memory->format = GFX_FORMAT_RGBA8;
-		memory->data   = ctx->pixels;
+		memory->format = GFX_FORMAT_BGRA8_UNORM;
+		memory->data   = ctx->bitmap_pixels;
 		memory->stride = (size_t)ctx->width * 4;
 		return 0;
 	}
 
 	surface_wsw_free_bitmap(ctx);
 
-	size_t pixels_size = (size_t)memory->width * memory->height * 4;
-	u8 *pixels	   = alloc_alloc(&ctx->alloc, pixels_size);
-	if (pixels == NULL) {
-		log_error("csurface", "wsw", NULL, "failed to allocate surface pixels");
-		return 1;
-	}
-	mem_set(pixels, 0, pixels_size);
-
-	ctx->pixels	 = pixels;
-	ctx->pixels_size = pixels_size;
 	if (surface_wsw_create_bitmap(ctx, memory->width, memory->height)) {
-		alloc_free(&ctx->alloc, pixels, pixels_size);
-		ctx->pixels	 = NULL;
-		ctx->pixels_size = 0;
 		return 1;
 	}
 
-	memory->format = GFX_FORMAT_RGBA8;
-	memory->data   = ctx->pixels;
+	memory->format = GFX_FORMAT_BGRA8_UNORM;
+	memory->data   = ctx->bitmap_pixels;
 	memory->stride = (size_t)ctx->width * 4;
 	return 0;
-}
-
-static void surface_wsw_convert(surface_wsw_t *ctx)
-{
-	for (u16 y = 0; y < ctx->height; y++) {
-		const u8 *src = ctx->pixels + (size_t)y * ctx->width * 4;
-		u8 *dst	      = ctx->bitmap_pixels + (size_t)y * ctx->width * 4;
-		for (u16 x = 0; x < ctx->width; x++) {
-			dst[0] = src[2];
-			dst[1] = src[1];
-			dst[2] = src[0];
-			dst[3] = src[3];
-			src += 4;
-			dst += 4;
-		}
-	}
 }
 
 static int surface_wsw_gfx_present(gfx_surface_t *surface, gfx_present_mode_t present_mode)
@@ -389,11 +352,10 @@ static int surface_wsw_gfx_present(gfx_surface_t *surface, gfx_present_mode_t pr
 	}
 
 	surface_wsw_t *ctx = surface->data;
-	if (ctx->dc == NULL || ctx->memory_dc == NULL || ctx->bitmap == NULL || ctx->pixels == NULL || ctx->bitmap_pixels == NULL) {
+	if (ctx->dc == NULL || ctx->memory_dc == NULL || ctx->bitmap == NULL || ctx->bitmap_pixels == NULL) {
 		return 1;
 	}
 
-	surface_wsw_convert(ctx);
 	return ctx->wsw.BitBlt(ctx->dc, 0, 0, ctx->width, ctx->height, ctx->memory_dc, 0, 0, SRCCOPY) ? 0 : 1;
 }
 
