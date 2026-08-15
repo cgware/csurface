@@ -277,7 +277,7 @@ static void t_surface_wsw_symbols(proc_t *proc)
 	proc_setdlsym(proc, STRV("gdi32.dll"), STRV("BitBlt"), t_surface_wsw_symbol((t_surface_wsw_symbol_t)t_BitBlt));
 }
 
-static int t_surface_wsw_open(surface_t *surface)
+static int t_surface_wsw_open(surface_backend_t *surface)
 {
 	proc_init(&t_proc, 0, 1, ALLOC_STD);
 	t_surface_wsw_symbols(&t_proc);
@@ -288,15 +288,15 @@ static int t_surface_wsw_open(surface_t *surface)
 	t_gfx = (gfx_t){
 		.drv = &t_surface_wsw_gfx_driver,
 	};
-	return surface_init(surface,
-			    &(surface_config_t){
-				    .display = &t_display,
-				    .gfx     = &t_gfx,
-			    },
-			    ALLOC_STD) == NULL;
+	return surface_backend_init(surface,
+				    &(surface_backend_config_t){
+					    .display = &t_display,
+					    .gfx     = &t_gfx,
+				    },
+				    ALLOC_STD) == NULL;
 }
 
-static int t_surface_wsw_open_bound(surface_t *surface)
+static int t_surface_wsw_open_bound(surface_backend_t *surface)
 {
 	if (t_surface_wsw_open(surface)) {
 		return 1;
@@ -305,19 +305,19 @@ static int t_surface_wsw_open_bound(surface_t *surface)
 	t_window = (window_t){
 		.display = &t_display,
 	};
-	return surface_bind(surface, &t_window);
+	return surface_backend_bind(surface, &t_window);
 }
 
-static void t_surface_wsw_close(surface_t *surface)
+static void t_surface_wsw_close(surface_backend_t *surface)
 {
-	surface_free(surface);
+	surface_backend_free(surface);
 	proc_free(&t_proc);
 }
 
-static int t_surface_wsw_memory(surface_t *surface, gfx_surface_memory_t *memory)
+static int t_surface_wsw_memory(surface_backend_t *surface, gfx_surface_memory_t *memory)
 {
 	surface_native_t native = {0};
-	if (surface_native(surface, &native) || native.gfx_surface == NULL || native.gfx_surface->ops == NULL ||
+	if (surface_backend_native(surface, &native) || native.gfx_surface == NULL || native.gfx_surface->ops == NULL ||
 	    native.gfx_surface->ops->memory == NULL) {
 		return 1;
 	}
@@ -364,9 +364,9 @@ TEST(surface_wsw_init_rejects_invalid_arguments)
 
 	surface_driver_t *drv = t_surface_wsw_driver();
 	EXPECT_NOT_NULL(drv);
-	EXPECT_EQ(drv->init(NULL, &(surface_config_t){0}), 1);
-	EXPECT_EQ(drv->init(&(surface_t){0}, NULL), 1);
-	EXPECT_EQ(drv->init(&(surface_t){0}, &(surface_config_t){0}), 1);
+	EXPECT_EQ(drv->init(NULL, &(surface_backend_config_t){0}), 1);
+	EXPECT_EQ(drv->init(&(surface_backend_t){0}, NULL), 1);
+	EXPECT_EQ(drv->init(&(surface_backend_t){0}, &(surface_backend_config_t){0}), 1);
 
 	END;
 }
@@ -386,15 +386,15 @@ TEST(surface_wsw_init_alloc_failure)
 	t_gfx = (gfx_t){
 		.drv = &t_surface_wsw_gfx_driver,
 	};
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface,
-				 &(surface_config_t){
-					 .display = &t_display,
-					 .gfx	  = &t_gfx,
-				 },
-				 (alloc_t){.alloc = t_surface_wsw_alloc, .free = alloc_free_std}));
+	EXPECT_NULL(surface_backend_init(&surface,
+					 &(surface_backend_config_t){
+						 .display = &t_display,
+						 .gfx	  = &t_gfx,
+					 },
+					 (alloc_t){.alloc = t_surface_wsw_alloc, .free = alloc_free_std}));
 	log_set_quiet(0, 0);
 
 	proc_free(&t_proc);
@@ -414,15 +414,15 @@ TEST(surface_wsw_init_rejects_missing_user32_library)
 	t_gfx = (gfx_t){
 		.drv = &t_surface_wsw_gfx_driver,
 	};
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface,
-				 &(surface_config_t){
-					 .display = &t_display,
-					 .gfx	  = &t_gfx,
-				 },
-				 ALLOC_STD));
+	EXPECT_NULL(surface_backend_init(&surface,
+					 &(surface_backend_config_t){
+						 .display = &t_display,
+						 .gfx	  = &t_gfx,
+					 },
+					 ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	proc_free(&t_proc);
@@ -443,15 +443,15 @@ TEST(surface_wsw_init_rejects_missing_gdi32_library)
 	t_gfx = (gfx_t){
 		.drv = &t_surface_wsw_gfx_driver,
 	};
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface,
-				 &(surface_config_t){
-					 .display = &t_display,
-					 .gfx	  = &t_gfx,
-				 },
-				 ALLOC_STD));
+	EXPECT_NULL(surface_backend_init(&surface,
+					 &(surface_backend_config_t){
+						 .display = &t_display,
+						 .gfx	  = &t_gfx,
+					 },
+					 ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	proc_free(&t_proc);
@@ -475,15 +475,15 @@ TEST(surface_wsw_init_rejects_missing_symbol)
 	t_gfx = (gfx_t){
 		.drv = &t_surface_wsw_gfx_driver,
 	};
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface,
-				 &(surface_config_t){
-					 .display = &t_display,
-					 .gfx	  = &t_gfx,
-				 },
-				 ALLOC_STD));
+	EXPECT_NULL(surface_backend_init(&surface,
+					 &(surface_backend_config_t){
+						 .display = &t_display,
+						 .gfx	  = &t_gfx,
+					 },
+					 ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	proc_free(&t_proc);
@@ -497,7 +497,7 @@ TEST(surface_wsw_free_rejects_invalid_arguments)
 	surface_driver_t *drv = t_surface_wsw_driver();
 	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->free(NULL), 1);
-	EXPECT_EQ(drv->free(&(surface_t){0}), 1);
+	EXPECT_EQ(drv->free(&(surface_backend_t){0}), 1);
 
 	END;
 }
@@ -509,7 +509,7 @@ TEST(surface_wsw_unbind_rejects_invalid_arguments)
 	surface_driver_t *drv = t_surface_wsw_driver();
 	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->unbind(NULL), 1);
-	EXPECT_EQ(drv->unbind(&(surface_t){0}), 1);
+	EXPECT_EQ(drv->unbind(&(surface_backend_t){0}), 1);
 
 	END;
 }
@@ -521,12 +521,12 @@ TEST(surface_wsw_config_window_rejects_invalid_arguments)
 	surface_driver_t *drv = t_surface_wsw_driver();
 	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->config_window(NULL, &(window_config_t){0}), 1);
-	EXPECT_EQ(drv->config_window(&(surface_t){0}, &(window_config_t){0}), 1);
+	EXPECT_EQ(drv->config_window(&(surface_backend_t){0}, &(window_config_t){0}), 1);
 
 	t_surface_wsw_reset();
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
-	EXPECT_EQ(surface_config_window(&surface, NULL), 1);
+	EXPECT_EQ(surface_backend_config_window(&surface, NULL), 1);
 
 	t_surface_wsw_close(&surface);
 	END;
@@ -537,13 +537,13 @@ TEST(surface_wsw_config_window_rejects_missing_native_display)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface      = {0};
-	window_config_t config = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
 	t_display_native_ret = 1;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_config_window(&surface, &config), 1);
+	EXPECT_EQ(surface_backend_config_window(&surface, &config), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_wsw_close(&surface);
@@ -555,11 +555,11 @@ TEST(surface_wsw_config_window_sets_defaults)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface      = {0};
-	window_config_t config = {.depth = 24, .visual = 1};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {.depth = 24, .visual = 1};
 	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
 
-	EXPECT_EQ(surface_config_window(&surface, &config), 0);
+	EXPECT_EQ(surface_backend_config_window(&surface, &config), 0);
 	EXPECT_EQ(config.depth, 0);
 	EXPECT_EQ(config.visual, 0);
 	EXPECT_EQ(config.background, WINDOW_BACKGROUND_NONE);
@@ -575,12 +575,12 @@ TEST(surface_wsw_bind_rejects_invalid_arguments)
 	surface_driver_t *drv = t_surface_wsw_driver();
 	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->bind(NULL, &(window_t){0}), 1);
-	EXPECT_EQ(drv->bind(&(surface_t){0}, &(window_t){0}), 1);
+	EXPECT_EQ(drv->bind(&(surface_backend_t){0}, &(window_t){0}), 1);
 
 	t_surface_wsw_reset();
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
-	EXPECT_EQ(surface_bind(&surface, NULL), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, NULL), 1);
 
 	t_surface_wsw_close(&surface);
 	END;
@@ -591,13 +591,13 @@ TEST(surface_wsw_bind_rejects_missing_native_display)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface = {0};
-	window_t window	  = {.display = &t_display};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &t_display};
 	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
 	t_display_native_ret = 1;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_wsw_close(&surface);
@@ -609,13 +609,13 @@ TEST(surface_wsw_bind_rejects_missing_window_native)
 	START;
 
 	t_surface_wsw_reset();
-	t_window_native_ret = 1;
-	surface_t surface   = {0};
-	window_t window	    = {.display = &t_display};
+	t_window_native_ret	  = 1;
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &t_display};
 	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_wsw_close(&surface);
@@ -627,13 +627,13 @@ TEST(surface_wsw_bind_get_dc_failure)
 	START;
 
 	t_surface_wsw_reset();
-	t_wsw_get_dc_ret  = NULL;
-	surface_t surface = {0};
-	window_t window	  = {.display = &t_display};
+	t_wsw_get_dc_ret	  = NULL;
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &t_display};
 	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_wsw_close(&surface);
@@ -645,13 +645,13 @@ TEST(surface_wsw_bind_replaces_existing_window)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 	t_wsw_release_dc_calls = 0;
 	t_window_native_window = (void *)0x7777;
 	window_t window	       = {.display = &t_display};
 
-	EXPECT_EQ(surface_bind(&surface, &window), 0);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 0);
 	EXPECT_EQ(t_wsw_release_dc_calls, 1);
 	EXPECT_EQ(t_wsw_get_dc_calls, 2);
 
@@ -664,11 +664,11 @@ TEST(surface_wsw_bind_success)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface	= {0};
-	surface_native_t native = {0};
+	surface_backend_t surface = {0};
+	surface_native_t native	  = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 
-	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 0);
 	EXPECT_EQ(native.gfx_api, GFX_API_SOFTWARE);
 	EXPECT_EQ(native.native_type, DISPLAY_NATIVE_WINDOWS);
 	EXPECT_PTR(native.display, t_wsw_get_dc_ret);
@@ -687,7 +687,7 @@ TEST(surface_wsw_native_rejects_invalid_arguments)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 	surface_driver_t *drv = t_surface_wsw_driver();
 	EXPECT_NOT_NULL(drv);
@@ -704,10 +704,10 @@ TEST(surface_wsw_native_rejects_unbound_surface)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 	EXPECT_EQ(t_surface_wsw_open(&surface), 0);
 
-	EXPECT_EQ(surface_native(&surface, &(surface_native_t){0}), 1);
+	EXPECT_EQ(surface_backend_native(&surface, &(surface_native_t){0}), 1);
 
 	t_surface_wsw_close(&surface);
 	END;
@@ -718,7 +718,7 @@ TEST(surface_wsw_memory_exposes_bgra_dib_pixels)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface	    = {0};
+	surface_backend_t surface   = {0};
 	gfx_surface_memory_t memory = {.width = 2, .height = 2};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 
@@ -739,7 +739,7 @@ TEST(surface_wsw_memory_reuses_matching_bitmap)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface	    = {0};
+	surface_backend_t surface   = {0};
 	gfx_surface_memory_t memory = {.width = 2, .height = 2};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 	EXPECT_EQ(t_surface_wsw_memory(&surface, &memory), 0);
@@ -758,10 +758,10 @@ TEST(surface_wsw_memory_rejects_invalid_arguments)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface	= {0};
-	surface_native_t native = {0};
+	surface_backend_t surface = {0};
+	surface_native_t native	  = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
-	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 0);
 
 	EXPECT_EQ(native.gfx_surface->ops->memory(NULL, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
 	EXPECT_EQ(native.gfx_surface->ops->memory(native.gfx_surface, NULL), 1);
@@ -777,12 +777,12 @@ TEST(surface_wsw_memory_rejects_unbound_surface)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface	= {0};
-	surface_native_t native = {0};
+	surface_backend_t surface = {0};
+	surface_native_t native	  = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
-	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 0);
 	gfx_surface_t gfx_surface = *native.gfx_surface;
-	EXPECT_EQ(surface_unbind(&surface), 0);
+	EXPECT_EQ(surface_backend_unbind(&surface), 0);
 
 	EXPECT_EQ(gfx_surface.ops->memory(&gfx_surface, &(gfx_surface_memory_t){.width = 2, .height = 2}), 1);
 
@@ -796,7 +796,7 @@ TEST(surface_wsw_memory_create_dc_failure)
 
 	t_surface_wsw_reset();
 	t_wsw_create_compatible_dc_ret = NULL;
-	surface_t surface	       = {0};
+	surface_backend_t surface      = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 
 	log_set_quiet(0, 1);
@@ -813,7 +813,7 @@ TEST(surface_wsw_memory_create_dib_section_failure)
 
 	t_surface_wsw_reset();
 	t_wsw_create_dib_section_ret = NULL;
-	surface_t surface	     = {0};
+	surface_backend_t surface    = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 
 	log_set_quiet(0, 1);
@@ -831,7 +831,7 @@ TEST(surface_wsw_memory_create_dib_section_null_bits)
 
 	t_surface_wsw_reset();
 	t_wsw_create_dib_section_null_bits = 1;
-	surface_t surface		   = {0};
+	surface_backend_t surface	   = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 
 	log_set_quiet(0, 1);
@@ -848,8 +848,8 @@ TEST(surface_wsw_memory_select_object_failure)
 	START;
 
 	t_surface_wsw_reset();
-	t_wsw_select_object_ret = NULL;
-	surface_t surface	= {0};
+	t_wsw_select_object_ret	  = NULL;
+	surface_backend_t surface = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 
 	log_set_quiet(0, 1);
@@ -867,7 +867,7 @@ TEST(surface_wsw_present_blits_bgra_dib_pixels)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface	    = {0};
+	surface_backend_t surface   = {0};
 	gfx_surface_memory_t memory = {.width = 2, .height = 2};
 	surface_native_t native	    = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
@@ -881,7 +881,7 @@ TEST(surface_wsw_present_blits_bgra_dib_pixels)
 	pixels[5]  = 0x66;
 	pixels[6]  = 0x77;
 	pixels[7]  = 0x88;
-	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 0);
 	EXPECT_PTR(memory.data, t_wsw_bitmap_pixels);
 
 	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 0);
@@ -906,10 +906,10 @@ TEST(surface_wsw_present_rejects_invalid_arguments)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface	= {0};
-	surface_native_t native = {0};
+	surface_backend_t surface = {0};
+	surface_native_t native	  = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
-	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 0);
 
 	EXPECT_EQ(native.gfx_surface->ops->present(NULL, GFX_PRESENT_MODE_DEFAULT), 1);
 
@@ -923,12 +923,12 @@ TEST(surface_wsw_present_bit_blt_failure)
 
 	t_surface_wsw_reset();
 	t_wsw_bit_blt_ret	    = 0;
-	surface_t surface	    = {0};
+	surface_backend_t surface   = {0};
 	gfx_surface_memory_t memory = {.width = 2, .height = 2};
 	surface_native_t native	    = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 	EXPECT_EQ(t_surface_wsw_memory(&surface, &memory), 0);
-	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 0);
 
 	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 1);
 
@@ -941,13 +941,13 @@ TEST(surface_wsw_unbind_releases_gdi_objects)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface	    = {0};
+	surface_backend_t surface   = {0};
 	gfx_surface_memory_t memory = {.width = 2, .height = 2};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
 	EXPECT_EQ(t_surface_wsw_memory(&surface, &memory), 0);
 	t_wsw_select_object_calls = 0;
 
-	EXPECT_EQ(surface_unbind(&surface), 0);
+	EXPECT_EQ(surface_backend_unbind(&surface), 0);
 	EXPECT_EQ(t_wsw_select_object_calls, 1);
 	EXPECT_PTR(t_wsw_selected_object, t_wsw_select_object_ret);
 	EXPECT_EQ(t_wsw_delete_object_calls, 1);
@@ -963,10 +963,10 @@ TEST(surface_wsw_present_rejects_unprepared_surface)
 	START;
 
 	t_surface_wsw_reset();
-	surface_t surface	= {0};
-	surface_native_t native = {0};
+	surface_backend_t surface = {0};
+	surface_native_t native	  = {0};
 	EXPECT_EQ(t_surface_wsw_open_bound(&surface), 0);
-	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 0);
 
 	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 1);
 

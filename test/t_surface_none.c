@@ -25,7 +25,7 @@ static gfx_driver_t t_surface_none_gfx_driver = {
 static gfx_t t_surface_none_gfx = {
 	.drv = &t_surface_none_gfx_driver,
 };
-static surface_config_t t_surface_none_config = {
+static surface_backend_config_t t_surface_none_config = {
 	.display = &t_surface_none_display,
 	.gfx	 = &t_surface_none_gfx,
 };
@@ -55,15 +55,15 @@ TEST(surface_none_init_success)
 {
 	START;
 
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 
-	EXPECT_PTR(surface_init(&surface,
-				&t_surface_none_config,
-				(alloc_t){.alloc = alloc_alloc_std, .realloc = alloc_realloc_std, .free = alloc_free_std}),
+	EXPECT_PTR(surface_backend_init(&surface,
+					&t_surface_none_config,
+					(alloc_t){.alloc = alloc_alloc_std, .realloc = alloc_realloc_std, .free = alloc_free_std}),
 		   &surface);
 	EXPECT_PTR(surface.drv, t_surface_none_driver());
 
-	surface_free(&surface);
+	surface_backend_free(&surface);
 	END;
 }
 

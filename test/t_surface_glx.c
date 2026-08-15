@@ -303,7 +303,7 @@ static void *t_surface_glx_alloc_fail(alloc_t *alloc, size_t size)
 	return NULL;
 }
 
-static int t_surface_glx_open(proc_t *proc, gfx_t *gfx, display_t *display, surface_t *surface)
+static int t_surface_glx_open(proc_t *proc, gfx_t *gfx, display_t *display, surface_backend_t *surface)
 {
 	proc_init(proc, 0, 1, ALLOC_STD);
 	t_surface_glx_symbols(proc);
@@ -316,15 +316,15 @@ static int t_surface_glx_open(proc_t *proc, gfx_t *gfx, display_t *display, surf
 		.proc = proc,
 	};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = display,
 		.gfx	 = gfx,
 	};
 
-	return surface_init(surface, &config, ALLOC_STD) == NULL;
+	return surface_backend_init(surface, &config, ALLOC_STD) == NULL;
 }
 
-static int t_surface_glx_open_driver(proc_t *proc, gfx_t *gfx, display_t *display, surface_t *surface)
+static int t_surface_glx_open_driver(proc_t *proc, gfx_t *gfx, display_t *display, surface_backend_t *surface)
 {
 	proc_init(proc, 0, 1, ALLOC_STD);
 	t_surface_glx_symbols(proc);
@@ -337,17 +337,17 @@ static int t_surface_glx_open_driver(proc_t *proc, gfx_t *gfx, display_t *displa
 		.proc = proc,
 	};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = display,
 		.gfx	 = gfx,
 	};
 
-	return surface_init(surface, &config, ALLOC_STD) == NULL;
+	return surface_backend_init(surface, &config, ALLOC_STD) == NULL;
 }
 
-static void t_surface_glx_close(proc_t *proc, surface_t *surface)
+static void t_surface_glx_close(proc_t *proc, surface_backend_t *surface)
 {
-	surface_free(surface);
+	surface_backend_free(surface);
 	proc_free(proc);
 }
 
@@ -379,14 +379,14 @@ TEST(surface_glx_init_rejects_non_opengl)
 		.drv  = &t_surface_glx_display_driver,
 		.proc = &proc,
 	};
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
 
-	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 
 	proc_free(&proc);
 	END;
@@ -399,7 +399,7 @@ TEST(surface_glx_init_null_surface)
 	surface_driver_t *drv = t_surface_glx_driver();
 	EXPECT_NOT_NULL(drv);
 
-	surface_config_t config = {0};
+	surface_backend_config_t config = {0};
 
 	EXPECT_EQ(drv->init(NULL, &config), 1);
 
@@ -422,15 +422,15 @@ TEST(surface_glx_init_alloc_failure)
 		.drv  = &t_surface_glx_display_driver,
 		.proc = &proc,
 	};
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface, &config, (alloc_t){.alloc = t_surface_glx_alloc_fail}));
+	EXPECT_NULL(surface_backend_init(&surface, &config, (alloc_t){.alloc = t_surface_glx_alloc_fail}));
 	log_set_quiet(0, 0);
 
 	proc_free(&proc);
@@ -452,15 +452,15 @@ TEST(surface_glx_init_missing_symbol)
 		.drv  = &t_surface_glx_display_driver,
 		.proc = &proc,
 	};
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	proc_free(&proc);
@@ -483,15 +483,15 @@ TEST(surface_glx_init_missing_second_symbol)
 		.drv  = &t_surface_glx_display_driver,
 		.proc = &proc,
 	};
-	surface_t surface = {0};
+	surface_backend_t surface = {0};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	proc_free(&proc);
@@ -540,16 +540,16 @@ TEST(surface_glx_config_window_native_unavailable)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open_driver(&proc, &gfx, &display, &surface), 0);
 	t_display_native_ret = 1;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_config_window(&surface, &config), 1);
+	EXPECT_EQ(surface_backend_config_window(&surface, &config), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_glx_close(&proc, &surface);
@@ -561,16 +561,16 @@ TEST(surface_glx_config_window_version_unavailable)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open_driver(&proc, &gfx, &display, &surface), 0);
 	t_glx_query_version_ret = 0;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_config_window(&surface, &config), 1);
+	EXPECT_EQ(surface_backend_config_window(&surface, &config), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_glx_close(&proc, &surface);
@@ -582,15 +582,15 @@ TEST(surface_glx_config_window_replaces_visual)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
+	surface_backend_config_window(&surface, &config);
 
-	EXPECT_EQ(surface_config_window(&surface, &config), 0);
+	EXPECT_EQ(surface_backend_config_window(&surface, &config), 0);
 	EXPECT_EQ(t_display_native_free_calls, 1);
 
 	t_surface_glx_close(&proc, &surface);
@@ -602,16 +602,16 @@ TEST(surface_glx_config_window_no_visual)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open_driver(&proc, &gfx, &display, &surface), 0);
 	t_glx_choose_visual_ret = NULL;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_config_window(&surface, &config), 1);
+	EXPECT_EQ(surface_backend_config_window(&surface, &config), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_glx_close(&proc, &surface);
@@ -623,14 +623,14 @@ TEST(surface_glx_config_window_sets_config)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
 
-	surface_config_window(&surface, &config);
+	surface_backend_config_window(&surface, &config);
 
 	EXPECT_EQ(config.depth, 24);
 	EXPECT_EQ(config.visual, 0x12345678);
@@ -646,18 +646,18 @@ TEST(surface_glx_bind_sets_native_handle)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
+	surface_backend_config_window(&surface, &config);
 
-	surface_bind(&surface, &window);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 
 	EXPECT_EQ(native.handle, (u64)(uintptr_t)t_window_native_window);
 	EXPECT_NOT_NULL(native.gfx_surface);
@@ -688,15 +688,15 @@ TEST(surface_glx_bind_without_window_config)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_glx_close(&proc, &surface);
@@ -708,18 +708,18 @@ TEST(surface_glx_bind_native_window_unavailable)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
+	surface_backend_config_window(&surface, &config);
 	t_window_native_ret = 1;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_glx_close(&proc, &surface);
@@ -731,20 +731,20 @@ TEST(surface_glx_bind_replaces_window)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	t_window_native_window = (void *)(uintptr_t)0x5678;
 
-	EXPECT_EQ(surface_bind(&surface, &window), 0);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 0);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	EXPECT_EQ(native.handle, 0x5678);
 
 	t_surface_glx_close(&proc, &surface);
@@ -756,18 +756,18 @@ TEST(surface_glx_bind_create_context_failure)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
+	surface_backend_config_window(&surface, &config);
 	t_glx_create_context_ret = NULL;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_glx_close(&proc, &surface);
@@ -779,18 +779,18 @@ TEST(surface_glx_native_returns_display_and_visual)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
 
-	EXPECT_EQ(surface_native(&surface, &native), 0);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 0);
 	EXPECT_PTR(native.display, t_display_native_display);
 	EXPECT_PTR(native.visual, &t_glx_visual);
 	EXPECT_NOT_NULL(native.gfx_surface);
@@ -805,18 +805,18 @@ TEST(surface_glx_native_without_bind)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	(void)window;
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
+	surface_backend_config_window(&surface, &config);
 	surface_native_t native = {0};
 
-	EXPECT_EQ(surface_native(&surface, &native), 1);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 1);
 
 	t_surface_glx_close(&proc, &surface);
 	END;
@@ -827,10 +827,10 @@ TEST(surface_glx_native_null_native)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
 
 	EXPECT_EQ(surface.drv->native(&surface, NULL), 1);
@@ -844,17 +844,17 @@ TEST(surface_glx_gfx_proc_rejects_null_surface)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	void *sym = NULL;
 
 	EXPECT_EQ(native.gfx_surface->ops->proc(NULL, STRV("glXSwapBuffers"), &sym), 1);
@@ -868,17 +868,17 @@ TEST(surface_glx_gfx_proc_loads_symbol)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	void *sym = NULL;
 
 	EXPECT_EQ(native.gfx_surface->ops->proc(native.gfx_surface, STRV("glXSwapBuffers"), &sym), 0);
@@ -893,17 +893,17 @@ TEST(surface_glx_gfx_make_current_rejects_null_surface)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 
 	EXPECT_EQ(native.gfx_surface->ops->make_current(NULL), 1);
 
@@ -916,17 +916,17 @@ TEST(surface_glx_gfx_make_current_calls_glx)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	t_glx_make_current_calls = 0;
 
 	EXPECT_EQ(native.gfx_surface->ops->make_current(native.gfx_surface), 0);
@@ -943,17 +943,17 @@ TEST(surface_glx_gfx_clear_current_rejects_null_surface)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 
 	EXPECT_EQ(native.gfx_surface->ops->clear_current(NULL), 1);
 
@@ -966,17 +966,17 @@ TEST(surface_glx_gfx_clear_current_calls_glx)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	t_glx_make_current_calls = 0;
 
 	EXPECT_EQ(native.gfx_surface->ops->clear_current(native.gfx_surface), 0);
@@ -993,17 +993,17 @@ TEST(surface_glx_gfx_present_rejects_null_surface)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 
 	EXPECT_EQ(native.gfx_surface->ops->present(NULL, GFX_PRESENT_MODE_DEFAULT), 1);
 
@@ -1016,17 +1016,17 @@ TEST(surface_glx_gfx_present_swaps_buffers)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 
 	EXPECT_EQ(native.gfx_surface->ops->present(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT), 0);
 	EXPECT_EQ(t_glx_swap_buffers_calls, 1);
@@ -1041,17 +1041,17 @@ TEST(surface_glx_gfx_present_immediate_sets_swap_interval)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	gfx_present_mode_t actual = GFX_PRESENT_MODE_DEFAULT;
 
 	EXPECT_EQ(native.gfx_surface->ops->present_mode(native.gfx_surface, GFX_PRESENT_MODE_IMMEDIATE, &actual), 0);
@@ -1075,14 +1075,14 @@ TEST(surface_glx_gfx_present_loads_swap_interval_with_arb_get_proc_address)
 	proc_t proc		       = {0};
 	gfx_t gfx		       = {0};
 	display_t display	       = {0};
-	surface_t surface	       = {0};
+	surface_backend_t surface      = {0};
 	window_t window		       = {.display = &display};
 	window_config_t config	       = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	gfx_present_mode_t actual = GFX_PRESENT_MODE_DEFAULT;
 
 	EXPECT_EQ(native.gfx_surface->ops->present_mode(native.gfx_surface, GFX_PRESENT_MODE_IMMEDIATE, &actual), 0);
@@ -1100,17 +1100,17 @@ TEST(surface_glx_gfx_present_mode_rejects_invalid_args)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	gfx_present_mode_t actual = GFX_PRESENT_MODE_DEFAULT;
 
 	EXPECT_EQ(native.gfx_surface->ops->present_mode(NULL, GFX_PRESENT_MODE_IMMEDIATE, &actual), 1);
@@ -1126,17 +1126,17 @@ TEST(surface_glx_gfx_present_mode_default)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	gfx_present_mode_t actual = GFX_PRESENT_MODE_IMMEDIATE;
 
 	EXPECT_EQ(native.gfx_surface->ops->present_mode(native.gfx_surface, GFX_PRESENT_MODE_DEFAULT, &actual), 0);
@@ -1151,18 +1151,18 @@ TEST(surface_glx_gfx_present_mode_mailbox_uses_vsync)
 	START;
 
 	t_surface_glx_reset();
-	t_glx_swap_interval_proc = 3;
-	proc_t proc		 = {0};
-	gfx_t gfx		 = {0};
-	display_t display	 = {0};
-	surface_t surface	 = {0};
-	window_t window		 = {.display = &display};
-	window_config_t config	 = {0};
+	t_glx_swap_interval_proc  = 3;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	gfx_present_mode_t actual = GFX_PRESENT_MODE_DEFAULT;
 
 	EXPECT_EQ(native.gfx_surface->ops->present_mode(native.gfx_surface, GFX_PRESENT_MODE_MAILBOX, &actual), 0);
@@ -1177,19 +1177,19 @@ TEST(surface_glx_gfx_present_reports_mesa_swap_interval_failure)
 	START;
 
 	t_surface_glx_reset();
-	t_glx_swap_interval_proc = 2;
-	t_glx_swap_interval_ret	 = 1;
-	proc_t proc		 = {0};
-	gfx_t gfx		 = {0};
-	display_t display	 = {0};
-	surface_t surface	 = {0};
-	window_t window		 = {.display = &display};
-	window_config_t config	 = {0};
+	t_glx_swap_interval_proc  = 2;
+	t_glx_swap_interval_ret	  = 1;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	gfx_present_mode_t actual = GFX_PRESENT_MODE_DEFAULT;
 
 	EXPECT_EQ(native.gfx_surface->ops->present_mode(native.gfx_surface, GFX_PRESENT_MODE_IMMEDIATE, &actual), 0);
@@ -1207,19 +1207,19 @@ TEST(surface_glx_gfx_present_reports_sgi_swap_interval_failure)
 	START;
 
 	t_surface_glx_reset();
-	t_glx_swap_interval_proc = 3;
-	t_glx_swap_interval_ret	 = 1;
-	proc_t proc		 = {0};
-	gfx_t gfx		 = {0};
-	display_t display	 = {0};
-	surface_t surface	 = {0};
-	window_t window		 = {.display = &display};
-	window_config_t config	 = {0};
+	t_glx_swap_interval_proc  = 3;
+	t_glx_swap_interval_ret	  = 1;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 	gfx_present_mode_t actual = GFX_PRESENT_MODE_DEFAULT;
 
 	EXPECT_EQ(native.gfx_surface->ops->present_mode(native.gfx_surface, GFX_PRESENT_MODE_VSYNC, &actual), 0);
@@ -1237,20 +1237,20 @@ TEST(surface_glx_unbind_clears_native_handle)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
-	surface_bind(&surface, &window);
+	surface_backend_config_window(&surface, &config);
+	surface_backend_bind(&surface, &window);
 
-	surface_unbind(&surface);
+	surface_backend_unbind(&surface);
 	surface_native_t native = {0};
 
-	EXPECT_EQ(surface_native(&surface, &native), 1);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 1);
 
 	t_surface_glx_close(&proc, &surface);
 	END;
@@ -1261,15 +1261,15 @@ TEST(surface_glx_free_releases_visual)
 	START;
 
 	t_surface_glx_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_glx_open(&proc, &gfx, &display, &surface), 0);
-	surface_config_window(&surface, &config);
+	surface_backend_config_window(&surface, &config);
 
-	surface_free(&surface);
+	surface_backend_free(&surface);
 
 	EXPECT_EQ(t_display_native_free_calls, 1);
 

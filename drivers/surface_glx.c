@@ -145,7 +145,7 @@ static int surface_glx_compatible(const surface_info_t *info)
 	return info != NULL && info->gfx_api == GFX_API_OPENGL && info->native_type == DISPLAY_NATIVE_X11;
 }
 
-static int surface_glx_init(surface_t *srf, const surface_config_t *config)
+static int surface_glx_init(surface_backend_t *srf, const surface_backend_config_t *config)
 {
 	if (srf == NULL || config == NULL) {
 		return 1;
@@ -168,7 +168,7 @@ static int surface_glx_init(surface_t *srf, const surface_config_t *config)
 	return 0;
 }
 
-static int surface_glx_unbind(surface_t *srf)
+static int surface_glx_unbind(surface_backend_t *srf)
 {
 	if (srf == NULL || srf->data == NULL) {
 		return 1;
@@ -186,7 +186,7 @@ static int surface_glx_unbind(surface_t *srf)
 	return 0;
 }
 
-static int surface_glx_free(surface_t *srf)
+static int surface_glx_free(surface_backend_t *srf)
 {
 	if (srf == NULL || srf->data == NULL) {
 		return 1;
@@ -209,7 +209,7 @@ static int surface_glx_free(surface_t *srf)
 	return 0;
 }
 
-static int surface_glx_config_window(surface_t *srf, window_config_t *config)
+static int surface_glx_config_window(surface_backend_t *srf, window_config_t *config)
 {
 	if (srf == NULL || srf->data == NULL || config == NULL) {
 		return 1;
@@ -257,7 +257,7 @@ static int surface_glx_config_window(surface_t *srf, window_config_t *config)
 
 static const gfx_surface_ops_t surface_glx_gfx_ops;
 
-static int surface_glx_bind(surface_t *srf, window_t *window)
+static int surface_glx_bind(surface_backend_t *srf, window_t *window)
 {
 	if (srf == NULL || srf->data == NULL || window == NULL) {
 		return 1;
@@ -399,7 +399,7 @@ static const gfx_surface_ops_t surface_glx_gfx_ops = {
 	.present       = surface_glx_gfx_present,
 };
 
-static int surface_glx_native(surface_t *srf, surface_native_t *native)
+static int surface_glx_native(surface_backend_t *srf, surface_native_t *native)
 {
 	if (srf == NULL || srf->data == NULL || native == NULL) {
 		return 1;

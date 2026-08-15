@@ -255,7 +255,7 @@ static void t_surface_vk_wsi_symbols(proc_t *proc)
 		      t_surface_vk_wsi_symbol((t_surface_vk_wsi_symbol_t)t_vkDestroySurfaceKHR));
 }
 
-static int t_surface_vk_wsi_open(proc_t *proc, gfx_t *gfx, display_t *display, surface_t *surface)
+static int t_surface_vk_wsi_open(proc_t *proc, gfx_t *gfx, display_t *display, surface_backend_t *surface)
 {
 	proc_init(proc, 0, 1, ALLOC_STD);
 	t_surface_vk_wsi_symbols(proc);
@@ -267,17 +267,17 @@ static int t_surface_vk_wsi_open(proc_t *proc, gfx_t *gfx, display_t *display, s
 		.drv = &t_surface_vk_wsi_display_driver,
 	};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = display,
 		.gfx	 = gfx,
 	};
 
-	return surface_init(surface, &config, ALLOC_STD) == NULL;
+	return surface_backend_init(surface, &config, ALLOC_STD) == NULL;
 }
 
-static void t_surface_vk_wsi_close(proc_t *proc, surface_t *surface)
+static void t_surface_vk_wsi_close(proc_t *proc, surface_backend_t *surface)
 {
-	surface_free(surface);
+	surface_backend_free(surface);
 	proc_free(proc);
 }
 
@@ -371,18 +371,18 @@ TEST(surface_vk_wsi_init_rejects_non_vulkan)
 	proc_t proc = {0};
 	proc_init(&proc, 0, 1, ALLOC_STD);
 	t_surface_vk_wsi_symbols(&proc);
-	t_gfx_native_api  = GFX_API_OPENGL;
-	gfx_t gfx	  = {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
-	display_t display = {.drv = &t_surface_vk_wsi_display_driver};
-	surface_t surface = {0};
+	t_gfx_native_api	  = GFX_API_OPENGL;
+	gfx_t gfx		  = {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
+	display_t display	  = {.drv = &t_surface_vk_wsi_display_driver};
+	surface_backend_t surface = {0};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	proc_free(&proc);
@@ -396,7 +396,7 @@ TEST(surface_vk_wsi_init_null_surface)
 	surface_driver_t *drv = t_surface_vk_wsi_driver();
 	EXPECT_NOT_NULL(drv);
 
-	surface_config_t config = {0};
+	surface_backend_config_t config = {0};
 
 	EXPECT_EQ(drv->init(NULL, &config), 1);
 
@@ -411,10 +411,10 @@ TEST(surface_vk_wsi_init_rejects_unavailable_native_gfx)
 	t_gfx_native_instance = 0;
 	surface_driver_t *drv = t_surface_vk_wsi_driver();
 	EXPECT_NOT_NULL(drv);
-	gfx_t gfx		= {.drv = &t_surface_vk_wsi_gfx_driver};
-	display_t display	= {.drv = &t_surface_vk_wsi_display_driver};
-	surface_t surface	= {.alloc = ALLOC_STD};
-	surface_config_t config = {
+	gfx_t gfx			= {.drv = &t_surface_vk_wsi_gfx_driver};
+	display_t display		= {.drv = &t_surface_vk_wsi_display_driver};
+	surface_backend_t surface	= {.alloc = ALLOC_STD};
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
@@ -435,17 +435,17 @@ TEST(surface_vk_wsi_init_alloc_failure)
 	proc_t proc = {0};
 	proc_init(&proc, 0, 1, ALLOC_STD);
 	t_surface_vk_wsi_symbols(&proc);
-	gfx_t gfx	  = {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
-	display_t display = {.drv = &t_surface_vk_wsi_display_driver};
-	surface_t surface = {0};
+	gfx_t gfx		  = {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
+	display_t display	  = {.drv = &t_surface_vk_wsi_display_driver};
+	surface_backend_t surface = {0};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface, &config, (alloc_t){.alloc = t_surface_vk_wsi_alloc_fail}));
+	EXPECT_NULL(surface_backend_init(&surface, &config, (alloc_t){.alloc = t_surface_vk_wsi_alloc_fail}));
 	log_set_quiet(0, 0);
 
 	proc_free(&proc);
@@ -457,23 +457,23 @@ TEST(surface_vk_wsi_init_missing_gfx_native)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_gfx_native_ret  = 1;
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
+	t_gfx_native_ret	  = 1;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
 	proc_init(&proc, 0, 1, ALLOC_STD);
 	t_surface_vk_wsi_symbols(&proc);
 	gfx	= (gfx_t){.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
 	display = (display_t){.drv = &t_surface_vk_wsi_display_driver};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	proc_free(&proc);
@@ -487,17 +487,17 @@ TEST(surface_vk_wsi_init_missing_destroy_surface)
 	t_surface_vk_wsi_reset();
 	proc_t proc = {0};
 	proc_init(&proc, 0, 1, ALLOC_STD);
-	gfx_t gfx	  = {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
-	display_t display = {.drv = &t_surface_vk_wsi_display_driver};
-	surface_t surface = {0};
+	gfx_t gfx		  = {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
+	display_t display	  = {.drv = &t_surface_vk_wsi_display_driver};
+	surface_backend_t surface = {0};
 
-	surface_config_t config = {
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
 
 	log_set_quiet(0, 1);
-	EXPECT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	proc_free(&proc);
@@ -546,16 +546,16 @@ TEST(surface_vk_wsi_config_window_native_unavailable)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 	t_display_native_ret = 1;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_config_window(&surface, &config), 1);
+	EXPECT_EQ(surface_backend_config_window(&surface, &config), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -567,16 +567,16 @@ TEST(surface_vk_wsi_config_window_missing_display_handle)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 	t_display_native_display = NULL;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_config_window(&surface, &config), 1);
+	EXPECT_EQ(surface_backend_config_window(&surface, &config), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -588,18 +588,18 @@ TEST(surface_vk_wsi_config_window_sets_defaults)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {
-		.depth	    = 24,
-		.visual	    = 1234,
-		.background = WINDOW_BACKGROUND_DEFAULT,
-	};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {
+		   .depth      = 24,
+		   .visual     = 1234,
+		   .background = WINDOW_BACKGROUND_DEFAULT,
+	   };
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 
-	surface_config_window(&surface, &config);
+	surface_backend_config_window(&surface, &config);
 
 	EXPECT_EQ(config.depth, 0);
 	EXPECT_EQ(config.visual, 0);
@@ -614,15 +614,15 @@ TEST(surface_vk_wsi_config_window_accepts_wayland)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type  = DISPLAY_NATIVE_WAYLAND;
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_config_t config = {0};
+	t_display_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_config_t config	  = {0};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 
-	EXPECT_EQ(surface_config_window(&surface, &config), 0);
+	EXPECT_EQ(surface_backend_config_window(&surface, &config), 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
 	END;
@@ -633,22 +633,22 @@ TEST(surface_vk_wsi_bind_x11_creates_surface)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	proc_init(&proc, 0, 1, ALLOC_STD);
 	t_surface_vk_wsi_symbols(&proc);
-	gfx			= (gfx_t){.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
-	display			= (display_t){.drv = &t_surface_vk_wsi_display_driver};
-	surface_config_t config = {
+	gfx				= (gfx_t){.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
+	display				= (display_t){.drv = &t_surface_vk_wsi_display_driver};
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
-	EXPECT_NOT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NOT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 
-	surface_bind(&surface, &window);
+	surface_backend_bind(&surface, &window);
 
 	EXPECT_EQ(t_vk_create_xlib_surface_calls, 1);
 	EXPECT_EQ(t_vk_xlib_window, 0x2222);
@@ -662,18 +662,18 @@ TEST(surface_vk_wsi_bind_windows_creates_surface)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type	 = DISPLAY_NATIVE_WINDOWS;
-	t_window_native_type	 = DISPLAY_NATIVE_WINDOWS;
-	t_display_native_display = (void *)0x3333;
-	t_window_native_window	 = (void *)0x4444;
-	proc_t proc		 = {0};
-	gfx_t gfx		 = {0};
-	display_t display	 = {0};
-	surface_t surface	 = {0};
-	window_t window		 = {.display = &display};
+	t_display_native_type	  = DISPLAY_NATIVE_WINDOWS;
+	t_window_native_type	  = DISPLAY_NATIVE_WINDOWS;
+	t_display_native_display  = (void *)0x3333;
+	t_window_native_window	  = (void *)0x4444;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 
-	surface_bind(&surface, &window);
+	surface_backend_bind(&surface, &window);
 
 	EXPECT_EQ(t_vk_create_win32_surface_calls, 1);
 
@@ -686,18 +686,18 @@ TEST(surface_vk_wsi_bind_wayland_creates_surface)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type	 = DISPLAY_NATIVE_WAYLAND;
-	t_window_native_type	 = DISPLAY_NATIVE_WAYLAND;
-	t_display_native_display = (void *)0x3333;
-	t_window_native_window	 = (void *)0x4444;
-	proc_t proc		 = {0};
-	gfx_t gfx		 = {0};
-	display_t display	 = {0};
-	surface_t surface	 = {0};
-	window_t window		 = {.display = &display};
+	t_display_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	t_display_native_display  = (void *)0x3333;
+	t_window_native_window	  = (void *)0x4444;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 
-	surface_bind(&surface, &window);
+	surface_backend_bind(&surface, &window);
 
 	EXPECT_EQ(t_vk_create_wayland_surface_calls, 1);
 	EXPECT_EQ(t_vk_wayland_display, (wl_display *)0x3333);
@@ -725,16 +725,16 @@ TEST(surface_vk_wsi_bind_display_unavailable)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 	t_display_native_ret = 1;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -746,16 +746,16 @@ TEST(surface_vk_wsi_bind_window_unavailable)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 	t_window_native_ret = 1;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -767,16 +767,16 @@ TEST(surface_vk_wsi_bind_x11_missing_display_handle)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 	t_display_native_display = NULL;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -788,16 +788,16 @@ TEST(surface_vk_wsi_bind_x11_missing_window_handle)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 	t_window_native_window = NULL;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -815,18 +815,18 @@ TEST(surface_vk_wsi_bind_x11_missing_create_symbol)
 		      STRV("libvulkan.so.1"),
 		      STRV("vkDestroySurfaceKHR"),
 		      t_surface_vk_wsi_symbol((t_surface_vk_wsi_symbol_t)t_vkDestroySurfaceKHR));
-	gfx_t gfx		= {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
-	display_t display	= {.drv = &t_surface_vk_wsi_display_driver};
-	surface_t surface	= {0};
-	window_t window		= {.display = &display};
-	surface_config_t config = {
+	gfx_t gfx			= {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
+	display_t display		= {.drv = &t_surface_vk_wsi_display_driver};
+	surface_backend_t surface	= {0};
+	window_t window			= {.display = &display};
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
-	EXPECT_NOT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NOT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -838,16 +838,16 @@ TEST(surface_vk_wsi_bind_x11_create_failure)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 	t_vk_create_xlib_surface_ret = 1;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -859,26 +859,26 @@ TEST(surface_vk_wsi_bind_windows_missing_display_handle)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type	 = DISPLAY_NATIVE_WINDOWS;
-	t_window_native_type	 = DISPLAY_NATIVE_WINDOWS;
-	t_display_native_display = NULL;
-	proc_t proc		 = {0};
-	gfx_t gfx		 = {0};
-	display_t display	 = {0};
-	surface_t surface	 = {0};
-	window_t window		 = {.display = &display};
+	t_display_native_type	  = DISPLAY_NATIVE_WINDOWS;
+	t_window_native_type	  = DISPLAY_NATIVE_WINDOWS;
+	t_display_native_display  = NULL;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	proc_init(&proc, 0, 1, ALLOC_STD);
 	t_surface_vk_wsi_symbols(&proc);
-	gfx			= (gfx_t){.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
-	display			= (display_t){.drv = &t_surface_vk_wsi_display_driver};
-	surface_config_t config = {
+	gfx				= (gfx_t){.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
+	display				= (display_t){.drv = &t_surface_vk_wsi_display_driver};
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
-	EXPECT_NOT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NOT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -890,18 +890,18 @@ TEST(surface_vk_wsi_bind_wayland_missing_display_handle)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type	 = DISPLAY_NATIVE_WAYLAND;
-	t_window_native_type	 = DISPLAY_NATIVE_WAYLAND;
-	t_display_native_display = NULL;
-	proc_t proc		 = {0};
-	gfx_t gfx		 = {0};
-	display_t display	 = {0};
-	surface_t surface	 = {0};
-	window_t window		 = {.display = &display};
+	t_display_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	t_display_native_display  = NULL;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -913,18 +913,18 @@ TEST(surface_vk_wsi_bind_wayland_missing_window_handle)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type  = DISPLAY_NATIVE_WAYLAND;
-	t_window_native_type   = DISPLAY_NATIVE_WAYLAND;
-	t_window_native_window = NULL;
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
+	t_display_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_window	  = NULL;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -944,18 +944,18 @@ TEST(surface_vk_wsi_bind_wayland_missing_create_symbol)
 		      STRV("libvulkan.so.1"),
 		      STRV("vkDestroySurfaceKHR"),
 		      t_surface_vk_wsi_symbol((t_surface_vk_wsi_symbol_t)t_vkDestroySurfaceKHR));
-	gfx_t gfx		= {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
-	display_t display	= {.drv = &t_surface_vk_wsi_display_driver};
-	surface_t surface	= {0};
-	window_t window		= {.display = &display};
-	surface_config_t config = {
+	gfx_t gfx			= {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
+	display_t display		= {.drv = &t_surface_vk_wsi_display_driver};
+	surface_backend_t surface	= {0};
+	window_t window			= {.display = &display};
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
-	EXPECT_NOT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NOT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -967,18 +967,18 @@ TEST(surface_vk_wsi_bind_wayland_create_failure)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type = DISPLAY_NATIVE_WAYLAND;
-	t_window_native_type  = DISPLAY_NATIVE_WAYLAND;
-	proc_t proc	      = {0};
-	gfx_t gfx	      = {0};
-	display_t display     = {0};
-	surface_t surface     = {0};
-	window_t window	      = {.display = &display};
+	t_display_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 	t_vk_create_wayland_surface_ret = 1;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -990,18 +990,18 @@ TEST(surface_vk_wsi_bind_windows_missing_window_handle)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type  = DISPLAY_NATIVE_WINDOWS;
-	t_window_native_type   = DISPLAY_NATIVE_WINDOWS;
-	t_window_native_window = NULL;
-	proc_t proc	       = {0};
-	gfx_t gfx	       = {0};
-	display_t display      = {0};
-	surface_t surface      = {0};
-	window_t window	       = {.display = &display};
+	t_display_native_type	  = DISPLAY_NATIVE_WINDOWS;
+	t_window_native_type	  = DISPLAY_NATIVE_WINDOWS;
+	t_window_native_window	  = NULL;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -1021,18 +1021,18 @@ TEST(surface_vk_wsi_bind_windows_missing_create_symbol)
 		      STRV("libvulkan.so.1"),
 		      STRV("vkDestroySurfaceKHR"),
 		      t_surface_vk_wsi_symbol((t_surface_vk_wsi_symbol_t)t_vkDestroySurfaceKHR));
-	gfx_t gfx		= {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
-	display_t display	= {.drv = &t_surface_vk_wsi_display_driver};
-	surface_t surface	= {0};
-	window_t window		= {.display = &display};
-	surface_config_t config = {
+	gfx_t gfx			= {.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
+	display_t display		= {.drv = &t_surface_vk_wsi_display_driver};
+	surface_backend_t surface	= {0};
+	window_t window			= {.display = &display};
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
-	EXPECT_NOT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NOT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -1044,18 +1044,18 @@ TEST(surface_vk_wsi_bind_windows_create_failure)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type = DISPLAY_NATIVE_WINDOWS;
-	t_window_native_type  = DISPLAY_NATIVE_WINDOWS;
-	proc_t proc	      = {0};
-	gfx_t gfx	      = {0};
-	display_t display     = {0};
-	surface_t surface     = {0};
-	window_t window	      = {.display = &display};
+	t_display_native_type	  = DISPLAY_NATIVE_WINDOWS;
+	t_window_native_type	  = DISPLAY_NATIVE_WINDOWS;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 	t_vk_create_win32_surface_ret = 1;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -1067,25 +1067,25 @@ TEST(surface_vk_wsi_bind_unsupported_native_type)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	proc_init(&proc, 0, 1, ALLOC_STD);
 	t_surface_vk_wsi_symbols(&proc);
-	gfx			= (gfx_t){.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
-	display			= (display_t){.drv = &t_surface_vk_wsi_display_driver};
-	surface_config_t config = {
+	gfx				= (gfx_t){.drv = &t_surface_vk_wsi_gfx_driver, .data = &proc};
+	display				= (display_t){.drv = &t_surface_vk_wsi_display_driver};
+	surface_backend_config_t config = {
 		.display = &display,
 		.gfx	 = &gfx,
 	};
-	EXPECT_NOT_NULL(surface_init(&surface, &config, ALLOC_STD));
+	EXPECT_NOT_NULL(surface_backend_init(&surface, &config, ALLOC_STD));
 	t_display_native_type = DISPLAY_NATIVE_NONE;
 	t_window_native_type  = DISPLAY_NATIVE_NONE;
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(surface_bind(&surface, &window), 1);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 1);
 	log_set_quiet(0, 0);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -1097,15 +1097,15 @@ TEST(surface_vk_wsi_bind_replaces_surface)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
-	surface_bind(&surface, &window);
+	surface_backend_bind(&surface, &window);
 
-	EXPECT_EQ(surface_bind(&surface, &window), 0);
+	EXPECT_EQ(surface_backend_bind(&surface, &window), 0);
 	EXPECT_EQ(t_vk_destroy_surface_calls, 1);
 
 	t_surface_vk_wsi_close(&proc, &surface);
@@ -1117,15 +1117,15 @@ TEST(surface_vk_wsi_unbind_destroys_surface)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
-	surface_bind(&surface, &window);
+	surface_backend_bind(&surface, &window);
 
-	surface_unbind(&surface);
+	surface_backend_unbind(&surface);
 
 	EXPECT_EQ(t_vk_destroyed_surface, 0x12345678);
 
@@ -1138,16 +1138,16 @@ TEST(surface_vk_wsi_native_returns_handle)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
-	surface_bind(&surface, &window);
+	surface_backend_bind(&surface, &window);
 
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 
 	EXPECT_EQ(native.handle, 0x12345678);
 	EXPECT_NOT_NULL(native.gfx_surface);
@@ -1164,18 +1164,18 @@ TEST(surface_vk_wsi_native_wayland_type)
 	START;
 
 	t_surface_vk_wsi_reset();
-	t_display_native_type = DISPLAY_NATIVE_WAYLAND;
-	t_window_native_type  = DISPLAY_NATIVE_WAYLAND;
-	proc_t proc	      = {0};
-	gfx_t gfx	      = {0};
-	display_t display     = {0};
-	surface_t surface     = {0};
-	window_t window	      = {.display = &display};
+	t_display_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	t_window_native_type	  = DISPLAY_NATIVE_WAYLAND;
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
-	surface_bind(&surface, &window);
+	surface_backend_bind(&surface, &window);
 
 	surface_native_t native = {0};
-	surface_native(&surface, &native);
+	surface_backend_native(&surface, &native);
 
 	EXPECT_EQ(native.native_type, DISPLAY_NATIVE_WAYLAND);
 
@@ -1188,14 +1188,14 @@ TEST(surface_vk_wsi_native_without_bind)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 
 	surface_native_t native = {0};
-	EXPECT_EQ(surface_native(&surface, &native), 1);
+	EXPECT_EQ(surface_backend_native(&surface, &native), 1);
 
 	t_surface_vk_wsi_close(&proc, &surface);
 	END;
@@ -1206,10 +1206,10 @@ TEST(surface_vk_wsi_native_null_native)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
 
 	EXPECT_EQ(surface.drv->native(&surface, NULL), 1);
@@ -1223,15 +1223,15 @@ TEST(surface_vk_wsi_free_destroys_surface)
 	START;
 
 	t_surface_vk_wsi_reset();
-	proc_t proc	  = {0};
-	gfx_t gfx	  = {0};
-	display_t display = {0};
-	surface_t surface = {0};
-	window_t window	  = {.display = &display};
+	proc_t proc		  = {0};
+	gfx_t gfx		  = {0};
+	display_t display	  = {0};
+	surface_backend_t surface = {0};
+	window_t window		  = {.display = &display};
 	EXPECT_EQ(t_surface_vk_wsi_open(&proc, &gfx, &display, &surface), 0);
-	surface_bind(&surface, &window);
+	surface_backend_bind(&surface, &window);
 
-	surface_free(&surface);
+	surface_backend_free(&surface);
 
 	EXPECT_EQ(t_vk_destroy_surface_calls, 1);
 

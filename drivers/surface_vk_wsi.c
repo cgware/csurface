@@ -121,7 +121,7 @@ static int surface_vk_wsi_plan(const surface_info_t *info, surface_plan_t *plan)
 	return 0;
 }
 
-static int surface_vk_wsi_init(surface_t *srf, const surface_config_t *config)
+static int surface_vk_wsi_init(surface_backend_t *srf, const surface_backend_config_t *config)
 {
 	if (srf == NULL || config == NULL || config->gfx == NULL) {
 		return 1;
@@ -150,7 +150,7 @@ static int surface_vk_wsi_init(surface_t *srf, const surface_config_t *config)
 	return 0;
 }
 
-static int surface_vk_wsi_unbind(surface_t *srf)
+static int surface_vk_wsi_unbind(surface_backend_t *srf)
 {
 	if (srf == NULL || srf->data == NULL) {
 		return 1;
@@ -166,7 +166,7 @@ static int surface_vk_wsi_unbind(surface_t *srf)
 	return 0;
 }
 
-static int surface_vk_wsi_free(surface_t *srf)
+static int surface_vk_wsi_free(surface_backend_t *srf)
 {
 	if (srf == NULL || srf->data == NULL) {
 		return 1;
@@ -179,7 +179,7 @@ static int surface_vk_wsi_free(surface_t *srf)
 	return 0;
 }
 
-static int surface_vk_wsi_config_window(surface_t *srf, window_config_t *config)
+static int surface_vk_wsi_config_window(surface_backend_t *srf, window_config_t *config)
 {
 	if (srf == NULL || srf->data == NULL || config == NULL) {
 		return 1;
@@ -199,7 +199,8 @@ static int surface_vk_wsi_config_window(surface_t *srf, window_config_t *config)
 	return 0;
 }
 
-static int surface_vk_wsi_bind_x11(surface_t *srf, surface_vk_wsi_t *ctx, const display_native_t *display, const window_native_t *window)
+static int surface_vk_wsi_bind_x11(surface_backend_t *srf, surface_vk_wsi_t *ctx, const display_native_t *display,
+				   const window_native_t *window)
 {
 	if (display->display == NULL || window->window == NULL) {
 		log_error("csurface", "csurface_vk_wsi", NULL, "X11 native window is unavailable");
@@ -223,7 +224,7 @@ static int surface_vk_wsi_bind_x11(surface_t *srf, surface_vk_wsi_t *ctx, const 
 	return 0;
 }
 
-static int surface_vk_wsi_bind_wayland(surface_t *srf, surface_vk_wsi_t *ctx, const display_native_t *display,
+static int surface_vk_wsi_bind_wayland(surface_backend_t *srf, surface_vk_wsi_t *ctx, const display_native_t *display,
 				       const window_native_t *window)
 {
 	if (display->display == NULL || window->window == NULL) {
@@ -248,7 +249,7 @@ static int surface_vk_wsi_bind_wayland(surface_t *srf, surface_vk_wsi_t *ctx, co
 	return 0;
 }
 
-static int surface_vk_wsi_bind_windows(surface_t *srf, surface_vk_wsi_t *ctx, const display_native_t *display,
+static int surface_vk_wsi_bind_windows(surface_backend_t *srf, surface_vk_wsi_t *ctx, const display_native_t *display,
 				       const window_native_t *window)
 {
 	if (display->display == NULL || window->window == NULL) {
@@ -273,7 +274,7 @@ static int surface_vk_wsi_bind_windows(surface_t *srf, surface_vk_wsi_t *ctx, co
 	return 0;
 }
 
-static int surface_vk_wsi_bind(surface_t *srf, window_t *window)
+static int surface_vk_wsi_bind(surface_backend_t *srf, window_t *window)
 {
 	if (srf == NULL || srf->data == NULL || window == NULL) {
 		return 1;
@@ -319,7 +320,7 @@ static int surface_vk_wsi_bind(surface_t *srf, window_t *window)
 	return 0;
 }
 
-static int surface_vk_wsi_native(surface_t *srf, surface_native_t *native)
+static int surface_vk_wsi_native(surface_backend_t *srf, surface_native_t *native)
 {
 	if (srf == NULL || srf->data == NULL || native == NULL) {
 		return 1;

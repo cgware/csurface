@@ -29,39 +29,30 @@ typedef struct surface_native_s {
 
 typedef struct surface_config_s {
 	display_t *display;
-	gfx_t *gfx;
-	gfx_api_t gfx_api;
+	const struct gfx_driver_s *driver;
 	gfx_surface_config_t surface;
 	int api_switching;
 } surface_config_t;
 
-typedef struct surface_gfx_config_s {
-	display_t *display;
-	const struct gfx_driver_s *driver;
-	gfx_surface_config_t surface;
-	int api_switching;
-} surface_gfx_config_t;
+typedef struct surface_backend_s surface_backend_t;
 
 typedef struct surface_s {
-	const struct surface_driver_s *drv;
-	alloc_t alloc;
+	surface_backend_t *backend;
+	gfx_t gfx;
 	surface_config_t config;
-	void *data;
+	proc_t *proc;
+	alloc_t alloc;
 } surface_t;
 
 int surface_plan(surface_plan_t *plan, const surface_plan_config_t *config);
 
-int surface_gfx_supported(const surface_gfx_config_t *config);
-int surface_gfx_init(surface_t *srf, gfx_t *gfx, const surface_gfx_config_t *config, proc_t *proc, alloc_t alloc);
-int surface_gfx_bind(surface_t *srf, gfx_t *gfx, window_t *window, const surface_gfx_config_t *config, proc_t *proc, alloc_t alloc);
-void surface_gfx_free(surface_t *srf, gfx_t *gfx);
-
-surface_t *surface_init(surface_t *srf, const surface_config_t *config, alloc_t alloc);
+int surface_supported(const surface_config_t *config);
+int surface_init(surface_t *surface, const surface_config_t *config, proc_t *proc, alloc_t alloc);
+int surface_config_window(surface_t *surface, window_config_t *config);
+int surface_bind(surface_t *surface, window_t *window);
+int surface_unbind(surface_t *surface);
+int surface_native(surface_t *surface, surface_native_t *native);
+gfx_t *surface_gfx(surface_t *surface);
 void surface_free(surface_t *srf);
-
-int surface_config_window(surface_t *srf, window_config_t *config);
-int surface_bind(surface_t *srf, window_t *window);
-int surface_unbind(surface_t *srf);
-int surface_native(surface_t *srf, surface_native_t *native);
 
 #endif

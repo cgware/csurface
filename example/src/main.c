@@ -60,7 +60,7 @@ typedef struct example_camera_s {
 
 typedef struct example_target_s {
 	gfx_driver_t *driver;
-	gfx_t gfx;
+	surface_t surface;
 	gfx_buffer_t vb;
 	gfx_buffer_t rect_ib;
 	gfx_buffer_t cube_ib;
@@ -75,7 +75,6 @@ typedef struct example_target_s {
 	gfx_swapchain_t swapchain;
 	gfx_image_t swapchain_images[8];
 	gfx_image_t *frame_image;
-	surface_t surface;
 	window_t window;
 	example_transform_t transform;
 	example_camera_t camera;
@@ -116,6 +115,14 @@ typedef struct example_state_s {
 } example_state_t;
 
 static int example_target_set_cursor_centered(example_target_t *target, int centered);
+
+static gfx_t *target_gfx(example_target_t *target)
+{
+	if (target == NULL) {
+		return NULL;
+	}
+	return surface_gfx(&target->surface);
+}
 
 static void example_camera_init(example_camera_t *camera)
 {
@@ -484,7 +491,7 @@ static int set_target_size(example_target_t *target, u16 width, u16 height)
 		.min_image_count = EXAMPLE_SWAPCHAIN_IMAGE_COUNT,
 		.image_capacity	 = sizeof(target->swapchain_images) / sizeof(target->swapchain_images[0]),
 	};
-	if (gfx_swapchain_init(&target->swapchain, &target->gfx, &swapchain_config) == NULL) {
+	if (gfx_swapchain_init(&target->swapchain, target_gfx(target), &swapchain_config) == NULL) {
 		gfx_swapchain_free(&target->swapchain);
 		return 1;
 	}
@@ -517,7 +524,7 @@ static void clear_target_graphics(example_target_t *target)
 	gfx_buffer_free(&target->gui_ub);
 	gfx_shader_free(&target->vs);
 	gfx_shader_free(&target->fs);
-	surface_gfx_free(&target->surface, &target->gfx);
+	surface_free(&target->surface);
 	target->driver = NULL;
 }
 
@@ -545,15 +552,15 @@ static int init_world_pipeline(example_target_t *target, gfx_pipeline_config_t *
 		.cull	    = world_cull_mode(cull),
 		.fill	    = world_fill_mode(fill),
 	};
-	if (gfx_pipeline_init(&target->world_pipeline[fill][cull], &target->gfx, config) == NULL) {
+	if (gfx_pipeline_init(&target->world_pipeline[fill][cull], target_gfx(target), config) == NULL) {
 		return 1;
 	}
 	return 0;
 }
 
-static surface_gfx_config_t target_graphics_config(display_t *display, gfx_driver_t *driver, u32 image_count)
+static surface_config_t target_graphics_config(display_t *display, gfx_driver_t *driver, u32 image_count)
 {
-	return (surface_gfx_config_t){
+	return (surface_config_t){
 		.display       = display,
 		.driver	       = driver,
 		.surface       = {.image_count = image_count},
@@ -567,14 +574,14 @@ static int init_target_graphics(display_t *display, proc_t *proc, gfx_driver_t *
 		return -1;
 	}
 
-	u32 image_count		    = EXAMPLE_SWAPCHAIN_IMAGE_COUNT;
-	surface_gfx_config_t config = target_graphics_config(display, driver, image_count);
-	if (!surface_gfx_supported(&config)) {
+	u32 image_count		= EXAMPLE_SWAPCHAIN_IMAGE_COUNT;
+	surface_config_t config = target_graphics_config(display, driver, image_count);
+	if (!surface_supported(&config)) {
 		return 0;
 	}
 
 	target->driver = driver;
-	if (surface_gfx_init(&target->surface, &target->gfx, &config, proc, ALLOC_STD)) {
+	if (surface_init(&target->surface, &config, proc, ALLOC_STD)) {
 		log_error("csurface_example", "init", NULL, "failed to initialize surface graphics for driver: %s", driver->name);
 		clear_target_graphics(target);
 		return -1;
@@ -637,15 +644,13 @@ static int fail_target_init(example_target_t *target)
 	return -1;
 }
 
-static int bind_target_graphics(display_t *display, proc_t *proc, example_target_t *target, window_t *window)
+static int bind_target_graphics(example_target_t *target, window_t *window)
 {
-	if (display == NULL || proc == NULL || target == NULL || target->driver == NULL || window == NULL) {
+	if (target == NULL || target->driver == NULL || window == NULL) {
 		return 1;
 	}
 
-	u32 image_count		    = EXAMPLE_SWAPCHAIN_IMAGE_COUNT;
-	surface_gfx_config_t config = target_graphics_config(display, target->driver, image_count);
-	return surface_gfx_bind(&target->surface, &target->gfx, window, &config, proc, ALLOC_STD);
+	return surface_bind(&target->surface, window);
 }
 
 static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t *compiler)
@@ -673,7 +678,7 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.size  = sizeof(vertices),
 		.data  = vertices,
 	};
-	if (gfx_buffer_init(&target->vb, &target->gfx, &vertex_buffer_config) == NULL) {
+	if (gfx_buffer_init(&target->vb, target_gfx(target), &vertex_buffer_config) == NULL) {
 		log_error("csurface_example",
 			  "init",
 			  NULL,
@@ -688,7 +693,7 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.size  = sizeof(rect_indices),
 		.data  = rect_indices,
 	};
-	if (gfx_buffer_init(&target->rect_ib, &target->gfx, &rect_index_buffer_config) == NULL) {
+	if (gfx_buffer_init(&target->rect_ib, target_gfx(target), &rect_index_buffer_config) == NULL) {
 		log_error("csurface_example",
 			  "init",
 			  NULL,
@@ -705,7 +710,7 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.size  = sizeof(cube_indices),
 		.data  = cube_indices,
 	};
-	if (gfx_buffer_init(&target->cube_ib, &target->gfx, &cube_index_buffer_config) == NULL) {
+	if (gfx_buffer_init(&target->cube_ib, target_gfx(target), &cube_index_buffer_config) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize cube index buffer for driver: %s", target->driver->name);
 		return 1;
 	}
@@ -721,7 +726,7 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.size  = sizeof(gui_transform),
 		.data  = &gui_transform,
 	};
-	if (gfx_buffer_init(&target->gui_ub, &target->gfx, &gui_uniform_buffer_config) == NULL) {
+	if (gfx_buffer_init(&target->gui_ub, target_gfx(target), &gui_uniform_buffer_config) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize GUI uniform buffer for driver: %s", target->driver->name);
 		return 1;
 	}
@@ -731,7 +736,7 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.size  = sizeof(target->transform),
 		.data  = &target->transform,
 	};
-	if (gfx_buffer_init(&target->world_ub, &target->gfx, &world_uniform_buffer_config) == NULL) {
+	if (gfx_buffer_init(&target->world_ub, target_gfx(target), &world_uniform_buffer_config) == NULL) {
 		log_error(
 			"csurface_example", "init", NULL, "failed to initialize world uniform buffer for driver: %s", target->driver->name);
 		return 1;
@@ -774,7 +779,7 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.stage	  = GFX_SHADER_STAGE_VERTEX,
 	};
 
-	if (gfx_shader_init(&target->vs, &target->gfx, &vs_config) == NULL) {
+	if (gfx_shader_init(&target->vs, target_gfx(target), &vs_config) == NULL) {
 		log_error("csurface_example",
 			  "init",
 			  NULL,
@@ -788,7 +793,7 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.source	  = strv_cstr(shader_src),
 		.stage	  = GFX_SHADER_STAGE_FRAGMENT,
 	};
-	if (gfx_shader_init(&target->fs, &target->gfx, &fs_config) == NULL) {
+	if (gfx_shader_init(&target->fs, target_gfx(target), &fs_config) == NULL) {
 		log_error("csurface_example",
 			  "init",
 			  NULL,
@@ -802,7 +807,7 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		{.index = 1, .semantic = "COLOR", .count = 4, .type = GFX_VALUE_FLOAT32},
 	};
 	if (gfx_render_pass_init(&target->render_pass,
-				 &target->gfx,
+				 target_gfx(target),
 				 &(gfx_render_pass_config_t){
 					 .color_format = target->frame_image->format,
 					 .depth_format = GFX_FORMAT_D32_FLOAT,
@@ -825,7 +830,7 @@ static int init_target_pipeline(example_target_t *target, gfx_shader_compiler_t 
 		.input_layout	   = input_layout,
 		.input_layout_size = sizeof(input_layout),
 	};
-	if (gfx_pipeline_init(&target->gui_pipeline, &target->gfx, &pipeline_config) == NULL) {
+	if (gfx_pipeline_init(&target->gui_pipeline, target_gfx(target), &pipeline_config) == NULL) {
 		log_error("csurface_example", "init", NULL, "failed to initialize GUI pipeline for driver: %s", target->driver->name);
 		return 1;
 	}
@@ -871,8 +876,7 @@ static int restore_target_graphics(example_state_t *state, example_target_t *tar
 		.width	= target->width,
 		.height = target->height,
 	};
-	if (surface_config_window(&target->surface, &config) ||
-	    bind_target_graphics(state->display, state->proc, target, &target->window)) {
+	if (surface_config_window(&target->surface, &config) || bind_target_graphics(target, &target->window)) {
 		return 1;
 	}
 	return set_target_size(target, target->width, target->height);
@@ -905,8 +909,7 @@ static int switch_target_graphics(example_state_t *state, example_target_t *targ
 	gfx_driver_t *old_driver = target->driver;
 	clear_target_graphics(target);
 	int target_initialized = init_target_graphics(state->display, state->proc, driver, target);
-	if (target_initialized <= 0 || surface_config_window(&target->surface, &config) ||
-	    bind_target_graphics(state->display, state->proc, target, &target->window) ||
+	if (target_initialized <= 0 || surface_config_window(&target->surface, &config) || bind_target_graphics(target, &target->window) ||
 	    set_target_size(target, target->width, target->height) || init_target_pipeline(target, state->shader_compiler)) {
 		clear_target_graphics(target);
 		if (init_target_graphics(state->display, state->proc, old_driver, target) <= 0 || restore_target_graphics(state, target) ||
@@ -1286,7 +1289,7 @@ static int open_target(display_t *display, proc_t *proc, gfx_driver_t *driver, c
 		log_error("csurface_example", "init", NULL, "failed to show window for graphics driver: %s", driver->name);
 		return fail_target_init(target);
 	}
-	if (bind_target_graphics(display, proc, target, &target->window)) {
+	if (bind_target_graphics(target, &target->window)) {
 		log_error("csurface_example", "init", NULL, "failed to bind surface for graphics driver: %s", driver->name);
 		return fail_target_init(target);
 	}
@@ -1364,7 +1367,7 @@ static int run_display_driver(display_driver_t *display_driver, fs_t *fs, proc_t
 					 shader_compiler,
 					 &targets[target_count]);
 		if (opened < 0) {
-			if (targets[target_count].gfx.drv != NULL) {
+			if (target_gfx(&targets[target_count]) != NULL) {
 				target_count++;
 			}
 			ret = 1;

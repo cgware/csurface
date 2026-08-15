@@ -141,7 +141,7 @@ static int surface_swx_compatible(const surface_info_t *info)
 	return info != NULL && info->gfx_api == GFX_API_SOFTWARE && info->native_type == DISPLAY_NATIVE_X11;
 }
 
-static int surface_swx_init(surface_t *srf, const surface_config_t *config)
+static int surface_swx_init(surface_backend_t *srf, const surface_backend_config_t *config)
 {
 	if (srf == NULL || config == NULL || config->display == NULL || config->display->proc == NULL) {
 		return 1;
@@ -187,7 +187,7 @@ static void surface_swx_free_image(surface_swx_t *ctx)
 	ctx->format	 = (surface_swx_format_t){0};
 }
 
-static int surface_swx_unbind(surface_t *srf)
+static int surface_swx_unbind(surface_backend_t *srf)
 {
 	if (srf == NULL || srf->data == NULL) {
 		return 1;
@@ -201,7 +201,7 @@ static int surface_swx_unbind(surface_t *srf)
 	return 0;
 }
 
-static int surface_swx_free(surface_t *srf)
+static int surface_swx_free(surface_backend_t *srf)
 {
 	if (srf == NULL || srf->data == NULL) {
 		return 1;
@@ -217,7 +217,7 @@ static int surface_swx_free(surface_t *srf)
 	return 0;
 }
 
-static int surface_swx_native_display(surface_t *srf, surface_swx_t *ctx)
+static int surface_swx_native_display(surface_backend_t *srf, surface_swx_t *ctx)
 {
 	display_native_t native = {0};
 	if (display_native(srf->config.display, &native) || native.type != DISPLAY_NATIVE_X11 || native.display == NULL) {
@@ -238,7 +238,7 @@ static int surface_swx_native_display(surface_t *srf, surface_swx_t *ctx)
 	return 0;
 }
 
-static int surface_swx_config_window(surface_t *srf, window_config_t *config)
+static int surface_swx_config_window(surface_backend_t *srf, window_config_t *config)
 {
 	if (srf == NULL || srf->data == NULL || config == NULL) {
 		return 1;
@@ -257,7 +257,7 @@ static int surface_swx_config_window(surface_t *srf, window_config_t *config)
 
 static const gfx_surface_ops_t surface_swx_gfx_ops;
 
-static int surface_swx_bind(surface_t *srf, window_t *window)
+static int surface_swx_bind(surface_backend_t *srf, window_t *window)
 {
 	if (srf == NULL || srf->data == NULL || window == NULL) {
 		return 1;
@@ -460,7 +460,7 @@ static const gfx_surface_ops_t surface_swx_gfx_ops = {
 	.memory	 = surface_swx_gfx_memory,
 };
 
-static int surface_swx_native(surface_t *srf, surface_native_t *native)
+static int surface_swx_native(surface_backend_t *srf, surface_native_t *native)
 {
 	if (srf == NULL || srf->data == NULL || native == NULL) {
 		return 1;
