@@ -1,4 +1,5 @@
 #include "surface_driver.h"
+#include "surface_platform.h"
 
 #include "log.h"
 #include "mem.h"
@@ -105,21 +106,19 @@ typedef struct surface_swx_s {
 
 static int surface_swx_load_symbol(surface_swx_t *ctx, void **sym, strv_t name)
 {
-	if (proc_dlsym(ctx->proc, ctx->lib, name, sym)) {
-		log_error("csurface", "swx", NULL, "failed to load X11 symbol: %.*s", name.len, name.data);
-		return 1;
-	}
-
-	return 0;
+	return surface_platform_load_symbol(ctx->proc, ctx->lib, sym, name, "swx", "X11");
 }
 
 #define LOAD_X11(_ctx, _name) surface_swx_load_symbol((_ctx), (void **)&(_ctx)->swx._name, STRV("X" #_name))
 
 static int surface_swx_load(surface_swx_t *ctx, proc_t *proc)
 {
-	ctx->proc = proc;
-	if (proc_dlopen(ctx->proc, STRV("libX11.so.6"), &ctx->lib) && proc_dlopen(ctx->proc, STRV("libX11.so"), &ctx->lib)) {
-		log_error("csurface", "swx", NULL, "failed to load libX11.so");
+	ctx->proc	     = proc;
+	const strv_t names[] = {
+		STRV("libX11.so.6"),
+		STRV("libX11.so"),
+	};
+	if (surface_platform_load_library(ctx->proc, names, sizeof(names) / sizeof(names[0]), &ctx->lib, "swx", "libX11.so")) {
 		return 1;
 	}
 
@@ -147,12 +146,10 @@ static int surface_swx_init(surface_backend_t *srf, const surface_backend_config
 		return 1;
 	}
 
-	surface_swx_t *ctx = alloc_alloc(&srf->alloc, sizeof(*ctx));
+	surface_swx_t *ctx = surface_platform_alloc(srf, config, sizeof(*ctx), "swx", 1);
 	if (ctx == NULL) {
-		log_error("csurface", "swx", NULL, "failed to allocate surface data");
 		return 1;
 	}
-	mem_set(ctx, 0, sizeof(*ctx));
 
 	if (surface_swx_load(ctx, config->display->proc)) {
 		alloc_free(&srf->alloc, ctx, sizeof(*ctx));
@@ -212,16 +209,14 @@ static int surface_swx_free(surface_backend_t *srf)
 	if (ctx->lib != NULL) {
 		proc_dlclose(ctx->proc, ctx->lib);
 	}
-	alloc_free(&srf->alloc, ctx, sizeof(*ctx));
-	srf->data = NULL;
+	surface_platform_free(srf, sizeof(*ctx));
 	return 0;
 }
 
 static int surface_swx_native_display(surface_backend_t *srf, surface_swx_t *ctx)
 {
 	display_native_t native = {0};
-	if (display_native(srf->config.display, &native) || native.type != DISPLAY_NATIVE_X11 || native.display == NULL) {
-		log_error("csurface", "swx", NULL, "X11 native display is unavailable");
+	if (surface_platform_display_native(srf, DISPLAY_NATIVE_X11, &native, "swx", "X11")) {
 		return 1;
 	}
 
@@ -249,9 +244,9 @@ static int surface_swx_config_window(surface_backend_t *srf, window_config_t *co
 		return 1;
 	}
 
-	config->depth	   = (u8)ctx->depth;
-	config->visual	   = (u32)ctx->swx.VisualIDFromVisual(ctx->visual);
-	config->background = WINDOW_BACKGROUND_NONE;
+	surface_platform_default_window_config(config);
+	config->depth  = (u8)ctx->depth;
+	config->visual = (u32)ctx->swx.VisualIDFromVisual(ctx->visual);
 	return 0;
 }
 
@@ -269,8 +264,7 @@ static int surface_swx_bind(surface_backend_t *srf, window_t *window)
 	}
 
 	window_native_t native = {0};
-	if (window_native(window, &native) || native.type != DISPLAY_NATIVE_X11 || native.window == NULL) {
-		log_error("csurface", "swx", NULL, "X11 native window is unavailable");
+	if (surface_platform_window_native(window, DISPLAY_NATIVE_X11, &native, "swx", "X11")) {
 		return 1;
 	}
 
@@ -278,13 +272,8 @@ static int surface_swx_bind(surface_backend_t *srf, window_t *window)
 		surface_swx_unbind(srf);
 	}
 
-	ctx->window	 = (Window)(uintptr_t)native.window;
-	ctx->gfx_surface = (gfx_surface_t){
-		.api	= GFX_API_SOFTWARE,
-		.handle = ctx->window,
-		.data	= ctx,
-		.ops	= &surface_swx_gfx_ops,
-	};
+	ctx->window = (Window)(uintptr_t)native.window;
+	surface_platform_gfx_surface(&ctx->gfx_surface, GFX_API_SOFTWARE, ctx->window, ctx, &surface_swx_gfx_ops);
 	return 0;
 }
 
@@ -471,14 +460,7 @@ static int surface_swx_native(surface_backend_t *srf, surface_native_t *native)
 		return 1;
 	}
 
-	*native = (surface_native_t){
-		.gfx_api     = GFX_API_SOFTWARE,
-		.native_type = DISPLAY_NATIVE_X11,
-		.display     = ctx->display,
-		.visual	     = ctx->visual,
-		.handle	     = ctx->window,
-		.gfx_surface = &ctx->gfx_surface,
-	};
+	surface_platform_native(native, GFX_API_SOFTWARE, DISPLAY_NATIVE_X11, ctx->display, ctx->visual, ctx->window, &ctx->gfx_surface);
 	return 0;
 }
 

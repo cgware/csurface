@@ -1,4 +1,5 @@
 #include "surface_driver.h"
+#include "surface_platform.h"
 
 #include "log.h"
 #include "mem.h"
@@ -76,12 +77,7 @@ typedef struct surface_wsw_s {
 
 static int surface_wsw_load_symbol(surface_wsw_t *ctx, void *lib, void **sym, strv_t name)
 {
-	if (proc_dlsym(ctx->proc, lib, name, sym)) {
-		log_error("csurface", "wsw", NULL, "failed to load Win32 symbol: %.*s", name.len, name.data);
-		return 1;
-	}
-
-	return 0;
+	return surface_platform_load_symbol(ctx->proc, lib, sym, name, "wsw", "Win32");
 }
 
 #define LOAD_USER32(_ctx, _name) surface_wsw_load_symbol((_ctx), (_ctx)->user32, (void **)&(_ctx)->wsw._name, STRV(#_name))
@@ -89,26 +85,21 @@ static int surface_wsw_load_symbol(surface_wsw_t *ctx, void *lib, void **sym, st
 
 static void surface_wsw_unload(surface_wsw_t *ctx)
 {
-	if (ctx->gdi32 != NULL) {
-		proc_dlclose(ctx->proc, ctx->gdi32);
-		ctx->gdi32 = NULL;
-	}
-	if (ctx->user32 != NULL) {
-		proc_dlclose(ctx->proc, ctx->user32);
-		ctx->user32 = NULL;
-	}
+	surface_platform_library_t libraries[] = {
+		{STRV("gdi32.dll"), &ctx->gdi32},
+		{STRV("user32.dll"), &ctx->user32},
+	};
+	surface_platform_close_library_set(ctx->proc, libraries, sizeof(libraries) / sizeof(libraries[0]));
 }
 
 static int surface_wsw_load(surface_wsw_t *ctx, proc_t *proc)
 {
-	ctx->proc = proc;
-	if (proc_dlopen(ctx->proc, STRV("user32.dll"), &ctx->user32)) {
-		log_error("csurface", "wsw", NULL, "failed to load user32.dll");
-		return 1;
-	}
-	if (proc_dlopen(ctx->proc, STRV("gdi32.dll"), &ctx->gdi32)) {
-		log_error("csurface", "wsw", NULL, "failed to load gdi32.dll");
-		surface_wsw_unload(ctx);
+	ctx->proc			       = proc;
+	surface_platform_library_t libraries[] = {
+		{STRV("user32.dll"), &ctx->user32},
+		{STRV("gdi32.dll"), &ctx->gdi32},
+	};
+	if (surface_platform_load_libraries(ctx->proc, libraries, sizeof(libraries) / sizeof(libraries[0]), "wsw")) {
 		return 1;
 	}
 
@@ -134,12 +125,10 @@ static int surface_wsw_init(surface_backend_t *srf, const surface_backend_config
 		return 1;
 	}
 
-	surface_wsw_t *ctx = alloc_alloc(&srf->alloc, sizeof(*ctx));
+	surface_wsw_t *ctx = surface_platform_alloc(srf, config, sizeof(*ctx), "wsw", 1);
 	if (ctx == NULL) {
-		log_error("csurface", "wsw", NULL, "failed to allocate surface data");
 		return 1;
 	}
-	mem_set(ctx, 0, sizeof(*ctx));
 
 	if (surface_wsw_load(ctx, config->display->proc)) {
 		alloc_free(&srf->alloc, ctx, sizeof(*ctx));
@@ -196,8 +185,7 @@ static int surface_wsw_free(surface_backend_t *srf)
 	surface_wsw_t *ctx = srf->data;
 	surface_wsw_unbind(srf);
 	surface_wsw_unload(ctx);
-	alloc_free(&srf->alloc, ctx, sizeof(*ctx));
-	srf->data = NULL;
+	surface_platform_free(srf, sizeof(*ctx));
 	return 0;
 }
 
@@ -208,14 +196,11 @@ static int surface_wsw_config_window(surface_backend_t *srf, window_config_t *co
 	}
 
 	display_native_t native = {0};
-	if (display_native(srf->config.display, &native) || native.type != DISPLAY_NATIVE_WINDOWS || native.display == NULL) {
-		log_error("csurface", "wsw", NULL, "Windows native display is unavailable");
+	if (surface_platform_display_native(srf, DISPLAY_NATIVE_WINDOWS, &native, "wsw", "Windows")) {
 		return 1;
 	}
 
-	config->depth	   = 0;
-	config->visual	   = 0;
-	config->background = WINDOW_BACKGROUND_NONE;
+	surface_platform_default_window_config(config);
 	return 0;
 }
 
@@ -228,15 +213,12 @@ static int surface_wsw_bind(surface_backend_t *srf, window_t *window)
 	}
 
 	display_native_t native_display = {0};
-	if (display_native(srf->config.display, &native_display) || native_display.type != DISPLAY_NATIVE_WINDOWS ||
-	    native_display.display == NULL) {
-		log_error("csurface", "wsw", NULL, "Windows native display is unavailable");
+	if (surface_platform_display_native(srf, DISPLAY_NATIVE_WINDOWS, &native_display, "wsw", "Windows")) {
 		return 1;
 	}
 
 	window_native_t native_window = {0};
-	if (window_native(window, &native_window) || native_window.type != DISPLAY_NATIVE_WINDOWS || native_window.window == NULL) {
-		log_error("csurface", "wsw", NULL, "Windows native window is unavailable");
+	if (surface_platform_window_native(window, DISPLAY_NATIVE_WINDOWS, &native_window, "wsw", "Windows")) {
 		return 1;
 	}
 
@@ -252,14 +234,9 @@ static int surface_wsw_bind(surface_backend_t *srf, window_t *window)
 		return 1;
 	}
 
-	ctx->window	 = hwnd;
-	ctx->dc		 = dc;
-	ctx->gfx_surface = (gfx_surface_t){
-		.api	= GFX_API_SOFTWARE,
-		.handle = (u64)(uintptr_t)hwnd,
-		.data	= ctx,
-		.ops	= &surface_wsw_gfx_ops,
-	};
+	ctx->window = hwnd;
+	ctx->dc	    = dc;
+	surface_platform_gfx_surface(&ctx->gfx_surface, GFX_API_SOFTWARE, (u64)(uintptr_t)hwnd, ctx, &surface_wsw_gfx_ops);
 	return 0;
 }
 
@@ -375,13 +352,8 @@ static int surface_wsw_native(surface_backend_t *srf, surface_native_t *native)
 		return 1;
 	}
 
-	*native = (surface_native_t){
-		.gfx_api     = GFX_API_SOFTWARE,
-		.native_type = DISPLAY_NATIVE_WINDOWS,
-		.display     = ctx->dc,
-		.handle	     = (u64)(uintptr_t)ctx->window,
-		.gfx_surface = &ctx->gfx_surface,
-	};
+	surface_platform_native(
+		native, GFX_API_SOFTWARE, DISPLAY_NATIVE_WINDOWS, ctx->dc, NULL, (u64)(uintptr_t)ctx->window, &ctx->gfx_surface);
 	return 0;
 }
 

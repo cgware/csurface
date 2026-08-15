@@ -1,4 +1,5 @@
 #include "surface_driver.h"
+#include "surface_platform.h"
 
 #include "log.h"
 #include "mem.h"
@@ -59,12 +60,7 @@ typedef struct surface_glx_s {
 
 static int surface_glx_load_symbol(surface_glx_t *ctx, void **sym, strv_t name)
 {
-	if (proc_dlsym(ctx->proc, ctx->lib, name, sym)) {
-		log_error("csurface", "glx", NULL, "failed to load GLX symbol: %.*s", name.len, name.data);
-		return 1;
-	}
-
-	return 0;
+	return surface_platform_load_symbol(ctx->proc, ctx->lib, sym, name, "glx", "GLX");
 }
 
 #define LOAD_GLX(_ctx, _name) surface_glx_load_symbol((_ctx), (void **)&(_ctx)->glx._name, STRV("gl" #_name))
@@ -122,10 +118,13 @@ static void surface_glx_load_proc_symbols(surface_glx_t *ctx)
 
 static int surface_glx_load(surface_glx_t *ctx, proc_t *proc)
 {
-	ctx->proc = proc;
-	if (proc_dlopen(ctx->proc, STRV("libGLX.so.0"), &ctx->lib) && proc_dlopen(ctx->proc, STRV("libGL.so.1"), &ctx->lib) &&
-	    proc_dlopen(ctx->proc, STRV("libGL.so"), &ctx->lib)) {
-		log_error("csurface", "glx", NULL, "failed to load GLX library");
+	ctx->proc	     = proc;
+	const strv_t names[] = {
+		STRV("libGLX.so.0"),
+		STRV("libGL.so.1"),
+		STRV("libGL.so"),
+	};
+	if (surface_platform_load_library(ctx->proc, names, sizeof(names) / sizeof(names[0]), &ctx->lib, "glx", "GLX library")) {
 		return 1;
 	}
 	if (LOAD_GLX(ctx, XQueryVersion) || LOAD_GLX(ctx, XChooseVisual) || LOAD_GLX(ctx, XCreateContext) ||
@@ -151,16 +150,13 @@ static int surface_glx_init(surface_backend_t *srf, const surface_backend_config
 		return 1;
 	}
 
-	alloc_t alloc	   = srf->alloc;
-	surface_glx_t *ctx = alloc_alloc(&alloc, sizeof(*ctx));
+	surface_glx_t *ctx = surface_platform_alloc(srf, config, sizeof(*ctx), "glx", 1);
 	if (ctx == NULL) {
-		log_error("csurface", "glx", NULL, "failed to allocate surface data");
 		return 1;
 	}
-	mem_set(ctx, 0, sizeof(*ctx));
 
 	if (surface_glx_load(ctx, config->display->proc)) {
-		alloc_free(&alloc, ctx, sizeof(*ctx));
+		alloc_free(&srf->alloc, ctx, sizeof(*ctx));
 		return 1;
 	}
 
@@ -204,8 +200,7 @@ static int surface_glx_free(surface_backend_t *srf)
 	 * with callbacks into unmapped code.
 	 */
 
-	alloc_free(&srf->alloc, ctx, sizeof(*ctx));
-	srf->data = NULL;
+	surface_platform_free(srf, sizeof(*ctx));
 	return 0;
 }
 
@@ -217,8 +212,7 @@ static int surface_glx_config_window(surface_backend_t *srf, window_config_t *co
 
 	surface_glx_t *ctx	= srf->data;
 	display_native_t native = {0};
-	if (display_native(srf->config.display, &native) || native.type != DISPLAY_NATIVE_X11 || native.display == NULL) {
-		log_error("csurface", "glx", NULL, "X11 native display is unavailable");
+	if (surface_platform_display_native(srf, DISPLAY_NATIVE_X11, &native, "glx", "X11")) {
 		return 1;
 	}
 
@@ -247,11 +241,11 @@ static int surface_glx_config_window(surface_backend_t *srf, window_config_t *co
 		return 1;
 	}
 
-	ctx->cdisplay	   = srf->config.display;
-	ctx->display	   = native.display;
-	config->depth	   = (u8)ctx->visual->depth;
-	config->visual	   = (u32)ctx->visual->visualid;
-	config->background = WINDOW_BACKGROUND_NONE;
+	ctx->cdisplay = srf->config.display;
+	ctx->display  = native.display;
+	surface_platform_default_window_config(config);
+	config->depth  = (u8)ctx->visual->depth;
+	config->visual = (u32)ctx->visual->visualid;
 	return 0;
 }
 
@@ -269,8 +263,7 @@ static int surface_glx_bind(surface_backend_t *srf, window_t *window)
 	}
 
 	window_native_t native = {0};
-	if (window_native(window, &native) || native.type != DISPLAY_NATIVE_X11 || native.window == NULL) {
-		log_error("csurface", "glx", NULL, "X11 native window is unavailable");
+	if (surface_platform_window_native(window, DISPLAY_NATIVE_X11, &native, "glx", "X11")) {
 		return 1;
 	}
 
@@ -285,12 +278,7 @@ static int surface_glx_bind(surface_backend_t *srf, window_t *window)
 		log_error("csurface", "glx", NULL, "failed to create GLX context");
 		return 1;
 	}
-	ctx->gfx_surface = (gfx_surface_t){
-		.api	= GFX_API_OPENGL,
-		.handle = ctx->window,
-		.data	= ctx,
-		.ops	= &surface_glx_gfx_ops,
-	};
+	surface_platform_gfx_surface(&ctx->gfx_surface, GFX_API_OPENGL, ctx->window, ctx, &surface_glx_gfx_ops);
 	return 0;
 }
 
@@ -410,14 +398,7 @@ static int surface_glx_native(surface_backend_t *srf, surface_native_t *native)
 		return 1;
 	}
 
-	*native = (surface_native_t){
-		.gfx_api     = GFX_API_OPENGL,
-		.native_type = DISPLAY_NATIVE_X11,
-		.display     = ctx->display,
-		.visual	     = ctx->visual,
-		.handle	     = ctx->window,
-		.gfx_surface = &ctx->gfx_surface,
-	};
+	surface_platform_native(native, GFX_API_OPENGL, DISPLAY_NATIVE_X11, ctx->display, ctx->visual, ctx->window, &ctx->gfx_surface);
 	return 0;
 }
 

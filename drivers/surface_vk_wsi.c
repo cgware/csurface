@@ -1,7 +1,7 @@
 #include "surface_driver.h"
+#include "surface_platform.h"
 
 #include "log.h"
-#include "mem.h"
 
 typedef void Display;
 typedef void wl_display;
@@ -133,12 +133,10 @@ static int surface_vk_wsi_init(surface_backend_t *srf, const surface_backend_con
 		return 1;
 	}
 
-	surface_vk_wsi_t *ctx = alloc_alloc(&srf->alloc, sizeof(*ctx));
+	surface_vk_wsi_t *ctx = surface_platform_alloc(srf, config, sizeof(*ctx), "csurface_vk_wsi", 0);
 	if (ctx == NULL) {
-		log_error("csurface", "csurface_vk_wsi", NULL, "failed to allocate surface data");
 		return 1;
 	}
-	mem_set(ctx, 0, sizeof(*ctx));
 	ctx->instance = native_gfx.instance;
 
 	if (LOAD_VK(config->gfx, ctx, DestroySurfaceKHR)) {
@@ -174,8 +172,7 @@ static int surface_vk_wsi_free(surface_backend_t *srf)
 
 	surface_vk_wsi_t *ctx = srf->data;
 	surface_vk_wsi_unbind(srf);
-	alloc_free(&srf->alloc, ctx, sizeof(*ctx));
-	srf->data = NULL;
+	surface_platform_free(srf, sizeof(*ctx));
 	return 0;
 }
 
@@ -193,9 +190,7 @@ static int surface_vk_wsi_config_window(surface_backend_t *srf, window_config_t 
 		return 1;
 	}
 
-	config->depth	   = 0;
-	config->visual	   = 0;
-	config->background = WINDOW_BACKGROUND_NONE;
+	surface_platform_default_window_config(config);
 	return 0;
 }
 
@@ -312,11 +307,7 @@ static int surface_vk_wsi_bind(surface_backend_t *srf, window_t *window)
 		return 1;
 	}
 
-	ctx->gfx_surface = (gfx_surface_t){
-		.api	= GFX_API_VULKAN,
-		.handle = ctx->surface,
-		.data	= ctx,
-	};
+	surface_platform_gfx_surface(&ctx->gfx_surface, GFX_API_VULKAN, ctx->surface, ctx, NULL);
 	return 0;
 }
 
@@ -331,12 +322,7 @@ static int surface_vk_wsi_native(surface_backend_t *srf, surface_native_t *nativ
 		return 1;
 	}
 
-	*native = (surface_native_t){
-		.gfx_api     = GFX_API_VULKAN,
-		.native_type = ctx->native_type,
-		.handle	     = ctx->surface,
-		.gfx_surface = &ctx->gfx_surface,
-	};
+	surface_platform_native(native, GFX_API_VULKAN, ctx->native_type, NULL, NULL, ctx->surface, &ctx->gfx_surface);
 	return 0;
 }
 

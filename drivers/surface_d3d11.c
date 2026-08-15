@@ -1,7 +1,7 @@
 #include "surface_driver.h"
+#include "surface_platform.h"
 
 #include "log.h"
-#include "mem.h"
 
 typedef long HRESULT;
 typedef unsigned int UINT;
@@ -153,12 +153,10 @@ static int surface_d3d11_init(surface_backend_t *srf, const surface_backend_conf
 		return 1;
 	}
 
-	surface_d3d11_t *ctx = alloc_alloc(&srf->alloc, sizeof(*ctx));
+	surface_d3d11_t *ctx = surface_platform_alloc(srf, config, sizeof(*ctx), "surface_d3d11", 0);
 	if (ctx == NULL) {
-		log_error("csurface", "surface_d3d11", NULL, "failed to allocate surface data");
 		return 1;
 	}
-	mem_set(ctx, 0, sizeof(*ctx));
 	srf->data = ctx;
 	return 0;
 }
@@ -203,8 +201,7 @@ static int surface_d3d11_free(surface_backend_t *srf)
 
 	surface_d3d11_t *ctx = srf->data;
 	surface_d3d11_unbind(srf);
-	alloc_free(&srf->alloc, ctx, sizeof(*ctx));
-	srf->data = NULL;
+	surface_platform_free(srf, sizeof(*ctx));
 	return 0;
 }
 
@@ -214,18 +211,25 @@ static int surface_d3d11_config_window(surface_backend_t *srf, window_config_t *
 		return 1;
 	}
 
-	config->background = WINDOW_BACKGROUND_NONE;
+	surface_platform_default_window_config(config);
 	return 0;
 }
 
 static int surface_d3d11_load(surface_backend_t *srf, surface_d3d11_t *ctx)
 {
-	if (proc_dlopen(srf->config.display->proc, STRV("dxgi.dll"), &ctx->lib)) {
-		log_error("csurface", "surface_d3d11", NULL, "failed to load DXGI library");
+	const strv_t names[] = {
+		STRV("dxgi.dll"),
+	};
+	if (surface_platform_load_library(
+		    srf->config.display->proc, names, sizeof(names) / sizeof(names[0]), &ctx->lib, "surface_d3d11", "DXGI library")) {
 		return 1;
 	}
-	if (proc_dlsym(srf->config.display->proc, ctx->lib, STRV("CreateDXGIFactory"), (void **)&ctx->CreateDXGIFactory)) {
-		log_error("csurface", "surface_d3d11", NULL, "failed to load DXGI symbol: CreateDXGIFactory");
+	if (surface_platform_load_symbol(srf->config.display->proc,
+					 ctx->lib,
+					 (void **)&ctx->CreateDXGIFactory,
+					 STRV("CreateDXGIFactory"),
+					 "surface_d3d11",
+					 "DXGI")) {
 		return 1;
 	}
 
@@ -236,7 +240,7 @@ static const gfx_surface_ops_t surface_d3d11_gfx_ops;
 
 static int surface_d3d11_bind(surface_backend_t *srf, window_t *window)
 {
-	if (srf == NULL || srf->data == NULL || window == NULL) {
+	if (srf == NULL || srf->data == NULL || srf->config.display == NULL || srf->config.display->proc == NULL || window == NULL) {
 		return 1;
 	}
 
@@ -247,8 +251,7 @@ static int surface_d3d11_bind(surface_backend_t *srf, window_t *window)
 	}
 
 	window_native_t native_window = {0};
-	if (window_native(window, &native_window) || native_window.type != DISPLAY_NATIVE_WINDOWS || native_window.window == NULL) {
-		log_error("csurface", "surface_d3d11", NULL, "Windows native window is unavailable");
+	if (surface_platform_window_native(window, DISPLAY_NATIVE_WINDOWS, &native_window, "surface_d3d11", "Windows")) {
 		return 1;
 	}
 	if (srf->config.surface.image_count < 2) {
@@ -313,12 +316,7 @@ static int surface_d3d11_bind(surface_backend_t *srf, window_t *window)
 		}
 	}
 
-	ctx->gfx_surface = (gfx_surface_t){
-		.api	= GFX_API_D3D11,
-		.handle = (u64)(uintptr_t)ctx->swapchain,
-		.data	= ctx,
-		.ops	= &surface_d3d11_gfx_ops,
-	};
+	surface_platform_gfx_surface(&ctx->gfx_surface, GFX_API_D3D11, (u64)(uintptr_t)ctx->swapchain, ctx, &surface_d3d11_gfx_ops);
 	return 0;
 }
 
@@ -397,12 +395,8 @@ static int surface_d3d11_native(surface_backend_t *srf, surface_native_t *native
 		return 1;
 	}
 
-	*native = (surface_native_t){
-		.gfx_api     = GFX_API_D3D11,
-		.native_type = DISPLAY_NATIVE_WINDOWS,
-		.handle	     = (u64)(uintptr_t)ctx->swapchain,
-		.gfx_surface = &ctx->gfx_surface,
-	};
+	surface_platform_native(
+		native, GFX_API_D3D11, DISPLAY_NATIVE_WINDOWS, NULL, NULL, (u64)(uintptr_t)ctx->swapchain, &ctx->gfx_surface);
 	return 0;
 }
 
